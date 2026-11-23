@@ -1,0 +1,30 @@
+TIER LIST STUDIO
+================
+Make character tier lists, Venn diagrams and axis charts from your KoiLog or
+VNDB games, then save them as pictures.
+
+1. INSTALL PYTHON (one time, free)
+   Get Python 3 from https://www.python.org/downloads/
+   On Windows, tick "Add python.exe to PATH" in the installer.
+
+2. START IT
+   Windows:        double-click  start-tierlist.bat
+   Mac / Linux:    run  ./start-tierlist.sh   (or:  python3 server.py)
+   Your browser opens at http://localhost:9100
+   Keep the black window open while you use it. Close it to stop.
+
+3. USE IT
+   - Click "Import characters". Type your KoiLog username (for example keitopan)
+     or paste a VNDB id like v17, or search by name.
+   - Drag characters onto the ranks. Switch between Tier list, Venn diagram and
+     Axis chart at the top.
+   - Click "Export image" to choose a style and size, then Download.
+
+Your lists are saved in your browser automatically. Use More > Save list to file
+to keep a backup.
+
+Why Python? KoiLog only lets its own website talk to it, so a tiny helper
+(server.py, runs only on your computer) fetches the data for the page.
+Nothing is uploaded anywhere.
+
+Project page: https://github.com/meenanox/otometierlist

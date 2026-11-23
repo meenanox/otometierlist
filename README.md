@@ -2,7 +2,13 @@
 
 Character tier-list and Venn-diagram builder for otome / joseimuke fans. Pulls characters from [KoiLog](https://koilog.moe) and [VNDB](https://vndb.org).
 
-**Start:** double-click `start-tierlist.bat` (opens http://localhost:9100). Needs Python 3 only, no packages.
+## Download (easiest)
+**[Download otometierlist.zip](https://github.com/meenanox/otometierlist/raw/main/otometierlist.zip)**, unzip it, and follow `HOW TO USE.txt` inside the `otometierlist` folder.
+You need [Python 3](https://www.python.org/downloads/) installed once (free; on Windows tick "Add python.exe to PATH").
+
+**Start:** double-click `start-tierlist.bat` (Windows) or run `./start-tierlist.sh` (Mac / Linux). It opens http://localhost:9100. No other packages needed.
+
+Maintainers: run `python make_zip.py` after changing the app and commit the refreshed zip.
 
 ## Import
 - **KoiLog user:** username or profile link (`koilog.moe/u/yourname`). Reads your games, route statuses and character ratings. Profile must be public.
