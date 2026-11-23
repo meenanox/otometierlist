@@ -187,7 +187,100 @@ async function loadFonts() {
   try { await Promise.all(["600 40px 'Cormorant Garamond'", "700 20px Orbitron", "20px 'Press Start 2P'"].map((f) => document.fonts.load(f))); } catch (e) { /* system fonts */ }
 }
 
-async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : renderTierImage(canvas, o); }
+async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : renderTierImage(canvas, o); }
+
+function wrapLines(c, text, maxW, maxLines = 3) {
+  const words = String(text).split(/\s+/), lines = []; let cur = "";
+  for (const w of words) { const nx = cur ? cur + " " + w : w; if (c.measureText(nx).width > maxW && cur) { lines.push(cur); cur = w; } else cur = nx; }
+  if (cur) lines.push(cur);
+  return lines.slice(0, maxLines).map((l) => fit(c, l, maxW));
+}
+function arrowHead(c, x, y, dx, dy, s) {
+  c.beginPath(); c.moveTo(x + dx * s, y + dy * s); c.lineTo(x - dy * s * 0.55, y + dx * s * 0.55); c.lineTo(x + dy * s * 0.55, y - dx * s * 0.55); c.closePath(); c.fill();
+}
+
+async function renderAxisImage(canvas, o) {
+  const T = EXPORT_STYLES[o.style] || EXPORT_STYLES.pastel, { fixed, W, fh, k } = frameOf(o);
+  await loadFonts();
+  const a = state.axis, m = headerMetrics(T, o, k), bottom = m.footH + m.pad * 0.4, ratio = a.aspect === "wide" ? 2 / 3 : 1;
+  const mx = 118 * k, my = 46 * k, availW = W - m.pad * 2 - mx * 2;
+  let plotW, plotH, px, py, H;
+  if (fixed) {
+    H = fh; const availH = H - m.top - bottom - my * 2; plotW = Math.min(availW, availH / ratio); plotH = plotW * ratio;
+    px = W / 2 - plotW / 2; py = m.top + my + (availH - plotH) / 2;
+  } else { plotW = availW; plotH = plotW * ratio; H = Math.round(m.top + my * 2 + plotH + bottom); px = m.pad + mx; py = m.top + my; }
+  const pxScale = Math.min(+o.scale || 1, Math.sqrt(90e6 / (W * H)), 16000 / H, 16000 / W);
+  canvas.width = Math.round(W * pxScale); canvas.height = Math.round(H * pxScale);
+  const c = canvas.getContext("2d"); c.setTransform(pxScale, 0, 0, pxScale, 0, 0);
+  T.bg(c, W, H, k); drawHeader(c, T, o, W, k, m);
+
+  const dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style);
+  const axisCol = a.axisColor || T.title, gridCol = a.gridColor || (dark ? "#ffffff" : T.names), N = a.grid || 0;
+  // plot panel and grid
+  c.save();
+  if (T.rowFill) { c.fillStyle = T.rowFill; rr(c, px, py, plotW, plotH, T.radius * k * 0.5); c.fill(); }
+  c.restore();
+  if (N) {
+    c.save(); c.globalAlpha = a.gridColor ? 0.9 : 0.22; c.strokeStyle = gridCol; c.lineWidth = Math.max(1, 1.3 * k);
+    for (let i = 1; i < N; i++) {
+      const gx = px + plotW * i / N, gy = py + plotH * i / N;
+      c.beginPath(); c.moveTo(gx, py); c.lineTo(gx, py + plotH); c.moveTo(px, gy); c.lineTo(px + plotW, gy); c.stroke();
+    }
+    c.restore();
+  }
+  c.save(); c.globalAlpha = a.gridColor ? 1 : 0.5; c.strokeStyle = gridCol; c.lineWidth = 2 * k; rr(c, px, py, plotW, plotH, T.radius * k * 0.5); c.stroke(); c.restore();
+
+  // axes with arrowheads
+  const cx = px + plotW / 2, cy = py + plotH / 2, ah = 11 * k;
+  c.save(); c.strokeStyle = axisCol; c.fillStyle = axisCol; c.lineWidth = 3.5 * k; if (T.glow) { c.shadowColor = axisCol; c.shadowBlur = 10 * k; }
+  c.beginPath(); c.moveTo(px - ah, cy); c.lineTo(px + plotW + ah, cy); c.moveTo(cx, py - ah); c.lineTo(cx, py + plotH + ah); c.stroke();
+  arrowHead(c, px - ah, cy, -1, 0, ah * 1.2); arrowHead(c, px + plotW + ah, cy, 1, 0, ah * 1.2);
+  arrowHead(c, cx, py - ah, 0, -1, ah * 1.2); arrowHead(c, cx, py + plotH + ah, 0, 1, ah * 1.2);
+  c.restore();
+
+  // end labels
+  const lf = Math.round(24 * k * (T.mono ? 0.5 : 1)); c.font = `700 ${lf}px ${T.labelFont}`; c.fillStyle = axisCol;
+  const side = (txt, x, align) => { c.textAlign = align; c.textBaseline = "middle"; const ls = wrapLines(c, txt, mx - 26 * k); ls.forEach((l, i) => c.fillText(l, x, cy + (i - (ls.length - 1) / 2) * lf * 1.15)); };
+  side(a.xMin, px - ah * 2.6, "right"); side(a.xMax, px + plotW + ah * 2.6, "left");
+  c.textAlign = "center"; c.textBaseline = "bottom"; c.fillText(fit(c, a.yMax, plotW), cx, py - ah * 2.4);
+  c.textBaseline = "top"; c.fillText(fit(c, a.yMin, plotW), cx, py + plotH + ah * 2.4);
+
+  // numbers on the axes
+  if (a.numbers && N) {
+    c.save(); c.globalAlpha = 0.75; c.fillStyle = T.names; c.font = `500 ${Math.round(12 * k)}px ${SANS}`;
+    for (let i = 0; i <= N; i++) {
+      const vx = a.nMin + (a.nMax - a.nMin) * i / N, vy = a.nMax - (a.nMax - a.nMin) * i / N;
+      c.textAlign = "center"; c.textBaseline = "top"; c.fillText(String(Math.round(vx * 10) / 10), px + plotW * i / N, cy + 7 * k);
+      if (i * 2 !== N) { c.textAlign = "left"; c.textBaseline = "middle"; c.fillText(String(Math.round(vy * 10) / 10), cx + 8 * k, py + plotH * i / N); }
+    }
+    c.restore();
+  }
+  // corner labels
+  c.save(); c.fillStyle = T.sub; c.font = `italic 600 ${Math.round(17 * k)}px ${SANS}`; c.textBaseline = "alphabetic";
+  const qm = 12 * k, qw = plotW / 2 - qm * 2;
+  c.textAlign = "left"; if (a.quad[0]) c.fillText(fit(c, a.quad[0], qw), px + qm, py + qm + 15 * k); if (a.quad[2]) c.fillText(fit(c, a.quad[2], qw), px + qm, py + plotH - qm);
+  c.textAlign = "right"; if (a.quad[1]) c.fillText(fit(c, a.quad[1], qw), px + plotW - qm, py + qm + 15 * k); if (a.quad[3]) c.fillText(fit(c, a.quad[3], qw), px + plotW - qm, py + plotH - qm);
+  c.restore();
+
+  // characters
+  const items = Object.entries(a.pos).filter(([key]) => state.items[key]).map(([key, p]) => ({ key, p, ...state.items[key] }));
+  const imgs = new Map();
+  for (let i = 0; i < items.length; i += 16) await Promise.all(items.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
+  const cw = plotW * (state.ui.axisCard || 7) / 100, ch = cw * 1.25, namesN = +o.names;
+  for (const it of items) {
+    const x = px + it.p.x * plotW - cw / 2, y = py + it.p.y * plotH - ch / 2;
+    drawCard(c, imgs.get(it.key), x, y, cw, ch, T.cardRadius * k, T, it.label, k);
+    if (namesN) {
+      const fs = Math.max(9 * k, Math.min(22 * k, cw * 0.17));
+      c.save(); c.font = `600 ${Math.round(fs)}px ${T.mono ? T.labelFont : SANS}`; c.textAlign = "center"; c.textBaseline = "alphabetic"; c.lineJoin = "round";
+      c.lineWidth = 3.5 * k; c.strokeStyle = dark ? "rgba(0,0,0,.7)" : "rgba(255,255,255,.9)"; c.fillStyle = dark ? "#fff" : "#2a2230";
+      const t = fit(c, it.label, cw * 1.9); c.strokeText(t, x + cw / 2, y + ch + fs + 2 * k); c.fillText(t, x + cw / 2, y + ch + fs + 2 * k); c.restore();
+    }
+  }
+  drawFooter(c, T, o, W, H, k, m);
+  return { w: W, h: H, px: [canvas.width, canvas.height], cards: items.length, card: Math.round(cw), missing: items.filter((it) => (it.imgHi || it.img) && !imgs.get(it.key)).length };
+}
+
 
 async function renderVennImage(canvas, o) {
   const T = EXPORT_STYLES[o.style] || EXPORT_STYLES.pastel, { fixed, W, fh, k } = frameOf(o);
@@ -379,8 +472,8 @@ function openTierExport() {
   const sync = () => {
     $("#exTitle").value = o.title; $("#exSub").value = o.subtitle; $("#exFoot").value = o.footer; $("#exSize").value = o.size; $("#exCard").value = o.card;
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
-    $("#exCard").disabled = o.size.startsWith("fix:") && state.mode !== "venn";
-    const venn = state.mode === "venn"; $("#exHide").closest("label").hidden = venn; $("#exPool").closest("label").hidden = venn;
+    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn");
+    const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier; $("#exPool").closest("label").hidden = noTier;
   };
   sync();
   let run = 0, timer = 0;
@@ -395,7 +488,7 @@ function openTierExport() {
   dlg.oninput = dlg.onchange = () => {
     Object.assign(o, { title: $("#exTitle").value, subtitle: $("#exSub").value, footer: $("#exFoot").value, size: $("#exSize").value, card: $("#exCard").value,
       scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked });
-    $("#exCard").disabled = o.size.startsWith("fix:") && state.mode !== "venn"; soon();
+    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn"); soon();
   };
   $("#exStyles").onclick = (e) => { const b = e.target.closest("[data-style]"); if (!b) return; o.style = b.dataset.style; $$("[data-style]", dlg).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); soon(); };
   const mime = () => ({ png: "image/png", jpeg: "image/jpeg", webp: "image/webp" }[o.fmt]);

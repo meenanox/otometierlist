@@ -102,3 +102,26 @@ textarea{width:100%;background:var(--panel);color:var(--ink);border:1px solid va
 .vregion{position:absolute;transform:translate(-50%,-50%);display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-content:center}
 .venn .card{width:var(--venn-card)}
 body.is-venn .tier-label{display:none}
+
+/* ---- axis chart ---- */
+.axis-outer{position:relative;padding:34px 118px;background:var(--panel);border:1px solid var(--line);border-radius:14px}
+@media (max-width:700px){.axis-outer{padding:30px 54px}.al{font-size:12px!important;width:50px!important}}
+.axis{position:relative;width:100%;background-color:transparent;border:2px solid var(--gc,#a9c4e6);
+  background-image:linear-gradient(var(--gc,#a9c4e6) 1px,transparent 1px),linear-gradient(90deg,var(--gc,#a9c4e6) 1px,transparent 1px);
+  background-size:calc(100%/var(--n,10)) calc(100%/var(--n,10))}
+.aline{position:absolute;background:var(--ac,#6b5b73);pointer-events:none}
+.aline.ah{left:0;right:0;top:50%;height:3px;transform:translateY(-50%)}
+.aline.av{top:0;bottom:0;left:50%;width:3px;transform:translateX(-50%)}
+.al{position:absolute;font:700 clamp(13px,1.6vw,22px) "Cormorant Garamond",Georgia,serif;color:var(--ac,#6b5b73);text-align:center;line-height:1.1}
+.al-top{top:4px;left:0;right:0}.al-bottom{bottom:4px;left:0;right:0}
+.al-left{left:6px;top:50%;width:104px;transform:translateY(-50%);text-align:right}
+.al-right{right:6px;top:50%;width:104px;transform:translateY(-50%);text-align:left}
+.tk{position:absolute;font-size:10px;color:var(--muted);pointer-events:none}
+.tk.tx{top:calc(50% + 5px);transform:translateX(-50%)}
+.tk.ty{left:calc(50% + 6px);transform:translateY(-50%)}
+.aq{position:absolute;font:italic 600 clamp(11px,1.3vw,16px) "Segoe UI",sans-serif;color:var(--muted);pointer-events:none;max-width:45%}
+.aq-tl{top:6px;left:8px}.aq-tr{top:6px;right:8px;text-align:right}.aq-bl{bottom:6px;left:8px}.aq-br{bottom:6px;right:8px;text-align:right}
+.apos{position:absolute;transform:translate(-50%,-50%);width:calc(var(--axis-card,7) * 1%)}
+.apos .card{width:100%}
+.venn-bar input[type=number]{width:56px}
+.venn-bar details{flex-basis:100%}

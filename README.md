@@ -9,8 +9,9 @@ Character tier-list and Venn-diagram builder for otome / joseimuke fans. Pulls c
 - **VNDB:** VN ids (`v17, v2002`) or a VNDB username / user id.
 - **Search by name:** KoiLog games, VNDB games, VNDB characters.
 
-## Two modes
+## Three modes
 - **Tier list:** drag characters onto ranks (or click one, then click a rank). **Auto-rank by rating** uses your KoiLog character ratings.
+- **Axis chart:** a cross chart (like an alignment chart). Drag characters anywhere on it. Set the four end labels, grid size (or none), square or wide shape, optional numbered scale, snap-to-grid, axis/grid colours and corner labels. **Auto-plot from ratings** puts personality left to right and looks bottom to top.
 - **Venn diagram:** 2 or 3 circles with your own names and colours. Drop a character where circles overlap to put them in several groups. **Auto-fill from ratings** makes Looks / Personality / Voice circles from your 5★ aspect ratings.
 
 ## Customise

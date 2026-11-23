@@ -17,11 +17,13 @@ let uid = 0;
 const newId = () => "t" + Date.now().toString(36) + (uid++).toString(36);
 const makeTiers = (preset) => preset.map(([name, color]) => ({ id: newId(), name, color, keys: [] }));
 
-const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, captions: true, numbered: false };
+const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false };
 const VENN_COLORS = ["#e8467c", "#3aa0e0", "#f2b94b"];
 const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
-const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), ui: { ...DEFAULT_UI }, customPresets: {} };
+const makeAxis = () => ({ xMin: "Hate", xMax: "Love", yMin: "Villain", yMax: "Hero", grid: 10, aspect: "square", numbers: false, nMin: -5, nMax: 5,
+  snap: false, axisColor: "", gridColor: "", quad: ["", "", "", ""], pos: {} });
+const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {} };
 let selected = null;
 
 // ---------- persistence ----------
@@ -32,13 +34,16 @@ function load(doc) {
   state.tiers = doc.tiers.map((t) => ({ id: t.id || newId(), name: t.name || "", color: t.color || "#888888", keys: (t.keys || []).filter((k) => doc.items && doc.items[k]) }));
   state.items = doc.items || {};
   state.order = (doc.order || Object.keys(state.items)).filter((k) => state.items[k]);
-  state.mode = doc.mode === "venn" ? "venn" : "tier";
+  state.mode = doc.mode === "venn" || doc.mode === "axis" ? doc.mode : "tier";
   const v = doc.venn;
   if (v && Array.isArray(v.circles) && v.circles.length >= 2) {
     state.venn = { n: v.n === 2 ? 2 : 3, size: +v.size || 100, overlap: v.overlap ?? 55, regions: {},
       circles: [0, 1, 2].map((i) => ({ name: v.circles[i]?.name ?? makeVenn().circles[i].name, color: v.circles[i]?.color || VENN_COLORS[i] })) };
     for (const [r, ks] of Object.entries(v.regions || {})) state.venn.regions[r] = (ks || []).filter((k) => state.items[k]);
   } else state.venn = makeVenn();
+  const ax = doc.axis || {};
+  state.axis = { ...makeAxis(), ...ax, quad: [0, 1, 2, 3].map((i) => String(ax.quad?.[i] ?? "")), pos: {} };
+  for (const [k, p] of Object.entries(ax.pos || {})) if (state.items[k] && p && isFinite(p.x) && isFinite(p.y)) state.axis.pos[k] = { x: +p.x, y: +p.y };
   state.ui = { ...DEFAULT_UI, ...(doc.ui || {}) };
   state.customPresets = doc.customPresets && typeof doc.customPresets === "object" ? doc.customPresets : {};
   return true;
@@ -56,7 +61,7 @@ function inkFor(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#1a1a1a" : "#ffffff";
 }
 const imgSrc = (u) => (u ? `/proxy/img?u=${encodeURIComponent(u)}` : "");
-const placed = () => new Set(state.mode === "venn" ? Object.values(state.venn.regions).flat() : state.tiers.flatMap((t) => t.keys));
+const placed = () => new Set(state.mode === "venn" ? Object.values(state.venn.regions).flat() : state.mode === "axis" ? Object.keys(state.axis.pos) : state.tiers.flatMap((t) => t.keys));
 
 async function mapPool(list, n, fn) {
   let i = 0;
@@ -72,7 +77,9 @@ function applyUi() {
   r.setProperty("--label-fs", u.labelFs + "px"); r.setProperty("--pool-w", u.poolW + "px"); r.setProperty("--venn-card", u.vennCard + "px");
   document.body.classList.toggle("no-captions", !u.captions);
   document.body.classList.toggle("pool-bottom", u.poolPos === "bottom");
+  r.setProperty("--axis-card", u.axisCard);
   document.body.classList.toggle("is-venn", state.mode === "venn");
+  document.body.classList.toggle("is-axis", state.mode === "axis");
 }
 
 // ---------- boards ----------
@@ -151,10 +158,11 @@ function renderVennBar() {
 function render() {
   const venn = state.mode === "venn";
   applyUi();
-  if (!renderVennBar.lastMode || renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
+  if (renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderAxisBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
-  $("#btnTiers").hidden = venn; $("#btnAuto").textContent = venn ? "Auto-fill from ratings" : "Auto-rank by rating";
-  if (venn) $("#board").innerHTML = vennBoardHtml();
+  $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", tier: "Auto-rank by rating" }[state.mode];
+  if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
+  else if (venn) $("#board").innerHTML = vennBoardHtml();
   else $("#board").innerHTML = state.tiers.map((t) => `
     <div class="tier" data-tier="${t.id}">
       <div class="tier-label" data-rename="${t.id}" style="background:${esc(t.color)};color:${inkFor(t.color)}" title="Double-click to rename"><span>${esc(t.name)}</span></div>
@@ -175,7 +183,8 @@ function render() {
 }
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
-function moveKey(key, dest, beforeKey) {
+function moveKey(key, dest, beforeKey, at) {
+  if (state.mode === "axis") { if (dest === "axis" && at) state.axis.pos[key] = at; else delete state.axis.pos[key]; selected = null; save(); render(); return; }
   const lists = state.mode === "venn" ? Object.values(state.venn.regions) : state.tiers.map((t) => t.keys);
   lists.forEach((arr) => { const i = arr.indexOf(key); if (i >= 0) arr.splice(i, 1); });
   if (dest) {
@@ -195,6 +204,10 @@ function vennRegionAt(e) {
   return g.keyAt((e.clientX - r.left) / r.width * 100, (e.clientY - r.top) / r.height * g.vh);
 }
 function dropTarget(e) {
+  if (state.mode === "axis") {
+    if (e.target.closest("#pool")) return { tier: "", before: null };
+    const at = axisPointAt(e); return at ? { tier: "axis", before: null, at } : null;
+  }
   if (state.mode === "venn") {
     if (e.target.closest("#pool")) return { tier: "", before: null };
     if (!e.target.closest("#venn")) return null;
@@ -219,17 +232,17 @@ document.addEventListener("dragstart", (e) => {
   const c = e.target.closest?.(".card"); if (!c) return;
   e.dataTransfer.setData("text/plain", c.dataset.key); e.dataTransfer.effectAllowed = "move";
 });
-document.addEventListener("dragover", (e) => { if (e.target.closest?.("[data-tier], #venn")) e.preventDefault(); });
+document.addEventListener("dragover", (e) => { if (e.target.closest?.("[data-tier], #venn, #axis")) e.preventDefault(); });
 document.addEventListener("drop", (e) => {
   const key = e.dataTransfer.getData("text/plain"); const d = dropTarget(e);
   if (!key || !state.items[key] || !d) return;
-  e.preventDefault(); moveKey(key, d.tier, d.before === key ? null : d.before);
+  e.preventDefault(); moveKey(key, d.tier, d.before === key ? null : d.before, d.at);
 });
 document.addEventListener("click", (e) => {
   const c = e.target.closest?.(".card");
   if (c) { selected = selected === c.dataset.key ? null : c.dataset.key; render(); return; }
   if (!selected) return;
-  if (state.mode === "venn") { const d = dropTarget(e); if (d) moveKey(selected, d.tier); return; }
+  if (state.mode !== "tier") { const d = dropTarget(e); if (d) moveKey(selected, d.tier, null, d.at); return; }
   const zone = e.target.closest?.("#board .tier, #pool");
   if (zone) moveKey(selected, zone.dataset.tier || "");
 });
@@ -242,6 +255,7 @@ document.addEventListener("contextmenu", (e) => {
 function removeItem(key) {
   state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => k !== key)));
   Object.values(state.venn.regions).forEach((a) => { const j = a.indexOf(key); if (j >= 0) a.splice(j, 1); });
+  delete state.axis.pos[key];
   delete state.items[key]; state.order = state.order.filter((k) => k !== key); save(); render();
 }
 
@@ -500,7 +514,7 @@ function syncLayoutDialog() {
   $$("#layoutBody [data-ui]").forEach((el) => {
     const v = state.ui[el.dataset.ui];
     if (el.type === "checkbox") el.checked = !!v; else el.value = v;
-    const out = el.parentElement.querySelector("output"); if (out) out.textContent = v + " px";
+    const out = el.parentElement.querySelector("output"); if (out) out.textContent = v + (el.dataset.ui === "axisCard" ? " %" : " px");
   });
 }
 $("#btnLayout").onclick = () => { syncLayoutDialog(); openDlg("#layoutDlg"); };
@@ -516,6 +530,69 @@ $("#resizer").addEventListener("pointerdown", (e) => {
   const up = () => { $("#resizer").removeEventListener("pointermove", move); $("#resizer").removeEventListener("pointerup", up); save(); };
   $("#resizer").addEventListener("pointermove", move); $("#resizer").addEventListener("pointerup", up);
 });
+
+// ---------- axis chart ----------
+const fmtTick = (v) => String(Math.round(v * 10) / 10);
+function axisBoardHtml() {
+  const a = state.axis, N = a.grid || 0, ratio = a.aspect === "wide" ? 66.67 : 100;
+  const ticks = a.numbers && N ? Array.from({ length: N + 1 }, (_, i) => {
+    const vx = a.nMin + (a.nMax - a.nMin) * i / N, vy = a.nMax - (a.nMax - a.nMin) * i / N, p = (i / N * 100).toFixed(2) + "%";
+    return `<span class="tk tx" style="left:${p}">${fmtTick(vx)}</span>${i * 2 === N ? "" : `<span class="tk ty" style="top:${p}">${fmtTick(vy)}</span>`}`;
+  }).join("") : "";
+  const quad = ["tl", "tr", "bl", "br"].map((c, i) => (a.quad[i] ? `<span class="aq aq-${c}">${esc(a.quad[i])}</span>` : "")).join("");
+  const cards = Object.entries(a.pos).filter(([k]) => state.items[k]).map(([k, p]) =>
+    `<div class="apos" style="left:${(p.x * 100).toFixed(2)}%;top:${(p.y * 100).toFixed(2)}%">${cardHtml(k)}</div>`).join("");
+  const ax = a.axisColor ? `;--ac:${esc(a.axisColor)}` : "", gc = a.gridColor ? `;--gc:${esc(a.gridColor)}` : "";
+  return `<div class="axis-outer" style="${ax}${gc}">
+    <div class="al al-top">${esc(a.yMax)}</div><div class="al al-bottom">${esc(a.yMin)}</div>
+    <div class="al al-left">${esc(a.xMin)}</div><div class="al al-right">${esc(a.xMax)}</div>
+    <div class="axis" id="axis" style="aspect-ratio:100/${ratio};--n:${N || 1}${N ? "" : ";background-image:none"}">
+      <i class="aline ah"></i><i class="aline av"></i>${ticks}${quad}${cards}</div></div>`;
+}
+
+function renderAxisBar() {
+  const bar = $("#axisBar"), a = state.axis; bar.hidden = state.mode !== "axis"; if (bar.hidden) return;
+  const t = (f, lab, w = 110) => `<label>${lab} <input data-af="${f}" value="${esc(a[f])}" maxlength="30" style="width:${w}px"></label>`;
+  bar.innerHTML = `${t("xMin", "Left")}${t("xMax", "Right")}${t("yMax", "Top")}${t("yMin", "Bottom")}
+    <label>Grid <select data-af="grid">${[0, 4, 6, 8, 10, 12, 16, 20].map((n) => `<option value="${n}"${a.grid === n ? " selected" : ""}>${n ? n + "×" + n : "none"}</option>`).join("")}</select></label>
+    <label>Shape <select data-af="aspect"><option value="square"${a.aspect === "square" ? " selected" : ""}>Square</option><option value="wide"${a.aspect === "wide" ? " selected" : ""}>Wide</option></select></label>
+    <label class="inline"><input type="checkbox" data-af="numbers"${a.numbers ? " checked" : ""}> Numbers</label>
+    <label>from <input type="number" data-af="nMin" value="${a.nMin}" style="width:56px"> to <input type="number" data-af="nMax" value="${a.nMax}" style="width:56px"></label>
+    <label class="inline"><input type="checkbox" data-af="snap"${a.snap ? " checked" : ""}> Snap to grid</label>
+    <label>Axes <input type="color" data-af="axisColor" value="${esc(a.axisColor || "#6b5b73")}"></label>
+    <label>Grid <input type="color" data-af="gridColor" value="${esc(a.gridColor || "#a9c4e6")}"></label>
+    <details><summary>Corner labels</summary><div class="row">${["Top left", "Top right", "Bottom left", "Bottom right"].map((n, i) => `<input data-q="${i}" placeholder="${n}" value="${esc(a.quad[i])}" maxlength="24" style="width:130px">`).join("")}</div></details>`;
+}
+$("#axisBar").addEventListener("input", (e) => {
+  const t = e.target, a = state.axis;
+  if (t.dataset.q !== undefined) a.quad[+t.dataset.q] = t.value;
+  else if (t.dataset.af) {
+    const f = t.dataset.af;
+    a[f] = t.type === "checkbox" ? t.checked : t.type === "number" ? (t.value === "" ? 0 : +t.value) : f === "grid" ? +t.value : t.value;
+  } else return;
+  save(); render();
+});
+
+function axisPointAt(e) {
+  const el = $("#axis"); if (!el) return null;
+  const r = el.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return null;
+  let x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height; const N = state.axis.grid;
+  if (state.axis.snap && N) { x = (Math.floor(x * N - 1e-9) + 0.5) / N; y = (Math.floor(y * N - 1e-9) + 0.5) / N; }
+  return { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) };
+}
+// Left-right = personality, bottom-top = looks, from your KoiLog ratings (1 to 5 stars each), with a little spread so cards don't stack.
+function autoPlotAxis(rated) {
+  const a = state.axis; let n = 0, seed = 5;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
+  Object.assign(a, { xMin: "Weak personality", xMax: "Great personality", yMin: "Plain design", yMax: "Gorgeous design", numbers: false });
+  a.pos = {};
+  for (const k of rated) {
+    const sub = state.items[k].sub || []; if (sub.length !== 4 || !sub[0] || !sub[2]) continue;
+    a.pos[k] = { x: Math.min(0.97, Math.max(0.03, 0.1 + (sub[2] - 1) / 4 * 0.8 + rnd() * 0.12)), y: Math.min(0.97, Math.max(0.03, 0.9 - (sub[0] - 1) / 4 * 0.8 + rnd() * 0.12)) }; n++;
+  }
+  renderVennBar.lastMode = null; return n;
+}
 
 // ---------- venn controls ----------
 $("#modeSeg").onclick = (e) => {
@@ -563,16 +640,17 @@ function autoFillVenn(rated) {
 $("#btnAuto").onclick = () => {
   const rated = state.order.filter((k) => state.items[k]?.rating);
   if (!rated.length) return toast("No KoiLog character ratings loaded. Import a KoiLog user with ratings ticked.", "error");
+  if (state.mode === "axis") { const n = autoPlotAxis(rated); save(); render(); return toast(n ? `Plotted ${n} characters by your ratings` : "No characters with looks and personality ratings (re-import to refresh)", n ? "" : "error"); }
   if (state.mode === "venn") { const n = autoFillVenn(rated); save(); render(); return toast(n ? `Placed ${n} characters by your ratings` : "None of your rated characters have a 5★ aspect (re-import to refresh)", n ? "" : "error"); }
   autoRankTiers(rated); save(); render(); toast(`Placed ${rated.length} characters by your rating`);
 };
 $("#btnReset").onclick = () => {
-  if (state.mode === "venn") state.venn.regions = {}; else state.tiers.forEach((t) => (t.keys = []));
+  if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else state.tiers.forEach((t) => (t.keys = []));
   save(); render(); $("#btnReset").closest("details").open = false;
 };
 $("#btnClear").onclick = () => {
   if (!confirm("Remove every character from this list? Ranks and circles are kept.")) return;
-  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
+  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
 };
 $("#btnSave").onclick = () => {
   const a = document.createElement("a");

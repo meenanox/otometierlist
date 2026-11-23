@@ -13,7 +13,7 @@
   <h1>Tier List Studio <small>characters from KoiLog &amp; VNDB</small></h1>
   <div class="top-actions">
     <input id="listName" value="My character tier list" aria-label="List name">
-    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button></span>
+    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button></span>
     <button id="btnImport" class="primary">Import characters</button>
     <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
     <button id="btnTiers" class="ghost">Edit ranks</button>
@@ -31,7 +31,7 @@
 </header>
 
 <main>
-  <div class="board-wrap"><div id="vennBar" class="venn-bar" hidden></div><section id="board" class="board" aria-label="Board"></section></div>
+  <div class="board-wrap"><div id="vennBar" class="venn-bar" hidden></div><div id="axisBar" class="venn-bar" hidden></div><section id="board" class="board" aria-label="Board"></section></div>
   <div id="resizer" class="resizer" title="Drag to resize the pool"></div>
   <aside class="pool-wrap">
     <div class="pool-head">
@@ -97,6 +97,7 @@
     <label>Rank label width <input type="range" data-ui="labelW" min="48" max="260" step="4"><output></output></label>
     <label>Rank label text size <input type="range" data-ui="labelFs" min="12" max="48" step="1"><output></output></label>
     <label>Venn card size <input type="range" data-ui="vennCard" min="24" max="120" step="2"><output></output></label>
+    <label>Axis chart card size <input type="range" data-ui="axisCard" min="3" max="16" step="0.5"><output></output></label>
     <label class="inline"><input type="checkbox" data-ui="captions"> Show names on cards</label>
     <button id="layoutReset" class="ghost">Reset layout</button>
   </div>
