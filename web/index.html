@@ -24,6 +24,7 @@
         <button id="btnSave">Save list to file</button>
         <button id="btnLoad">Open list file</button>
         <button id="btnReset">Move everyone back to the pool</button>
+        <button id="btnPoolReset">Reset character pool (remove unranked)</button>
         <button id="btnClear">Clear everything</button>
       </div>
     </details>
@@ -35,7 +36,7 @@
   <div id="resizer" class="resizer" title="Drag to resize the pool"></div>
   <aside class="pool-wrap">
     <div class="pool-head">
-      <b>Pool</b> <span id="poolCount" class="muted"></span>
+      <b>Pool</b> <span id="poolCount" class="muted"></span> <button id="btnPoolReset2" class="ghost" title="Remove all unranked characters from the pool">Reset pool</button>
       <input id="poolSearch" type="search" placeholder="Filter by name or game…">
       <select id="poolSort"><option value="added">As imported</option><option value="name">Name</option><option value="game">Game</option><option value="rating">My rating</option></select>
     </div>

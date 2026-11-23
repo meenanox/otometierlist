@@ -648,6 +648,22 @@ $("#btnReset").onclick = () => {
   if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else state.tiers.forEach((t) => (t.keys = []));
   save(); render(); $("#btnReset").closest("details").open = false;
 };
+// Reset character pool: removes the unranked characters shown in the pool; anything already on the board stays.
+function resetPool() {
+  const here = placed(), keys = state.order.filter((k) => state.items[k] && !here.has(k));
+  if (!keys.length) return toast("The pool is already empty");
+  const elsewhere = new Set([...state.tiers.flatMap((t) => t.keys), ...Object.values(state.venn.regions).flat(), ...Object.keys(state.axis.pos)]);
+  const other = keys.filter((k) => elsewhere.has(k)).length;
+  if (!confirm(`Remove ${keys.length} unranked character${keys.length === 1 ? "" : "s"} from the pool?` + (other ? `\n${other} of them are placed in another view (tier list, Venn or axis chart) and will be removed from there too.` : "") + "\nCharacters already on this board stay.")) return;
+  const gone = new Set(keys);
+  state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => !gone.has(k))));
+  Object.values(state.venn.regions).forEach((a) => { for (let i = a.length - 1; i >= 0; i--) if (gone.has(a[i])) a.splice(i, 1); });
+  keys.forEach((k) => { delete state.axis.pos[k]; delete state.items[k]; });
+  state.order = state.order.filter((k) => !gone.has(k));
+  selected = null; save(); render(); toast(`Removed ${keys.length} from the pool`);
+}
+$("#btnPoolReset").onclick = () => { resetPool(); $("#btnPoolReset").closest("details").open = false; };
+$("#btnPoolReset2").onclick = resetPool;
 $("#btnClear").onclick = () => {
   if (!confirm("Remove every character from this list? Ranks and circles are kept.")) return;
   state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
