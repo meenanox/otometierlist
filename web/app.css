@@ -125,3 +125,6 @@ body.is-venn .tier-label{display:none}
 .apos .card{width:100%}
 .venn-bar input[type=number]{width:56px}
 .venn-bar details{flex-basis:100%}
+
+.export-opts label.rng{display:grid;grid-template-columns:1fr 130px 44px;align-items:center;gap:8px;font-size:12px}
+.export-opts label.rng output{text-align:right;color:var(--muted)}

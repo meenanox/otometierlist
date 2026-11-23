@@ -144,28 +144,34 @@ function wrap2(c, text, maxW) {
 
 
 function headerMetrics(T, o, k) {
-  const pad = T.pad * k, titleSize = T.titleSize * k;
-  const titleH = o.title ? titleSize + 36 * k : 8 * k, subH = o.subtitle ? 40 * k : 0, footH = o.footer ? 50 * k : 24 * k;
-  return { pad, titleSize, titleH, subH, footH, top: pad + titleH + subH };
+  // titleScale / subScale / headGap are percentages from the export dialog (100 = the style's default)
+  const pad = T.pad * k, titleSize = T.titleSize * k * (+o.titleScale || 100) / 100;
+  const g = Math.max(0, (o.headGap ?? 100)) / 100, subFont = 22 * k * (+o.subScale || 100) / 100;
+  const titleH = o.title ? titleSize + 36 * k * g : 8 * k * g;
+  const subH = o.subtitle ? subFont * 0.64 + subFont * 1.15 * g : 0, footH = o.footer ? 50 * k : 24 * k;
+  return { pad, titleSize, titleH, subH, subFont, footH, top: pad + titleH + subH };
 }
 function drawHeader(c, T, o, W, k, m) {
   const { pad, titleSize, titleH } = m, align = T.titleAlign;
   c.textBaseline = "alphabetic";
   if (o.title) {
-    c.font = T.titleFont.replace("{s}", Math.round(titleSize)); c.fillStyle = T.title; c.textAlign = align;
+    const maxTitleW = W - pad * 2 - (T.ornament ? 160 * k : 0); let ts = titleSize;
+    c.font = T.titleFont.replace("{s}", Math.round(ts)); c.fillStyle = T.title; c.textAlign = align;
+    while (c.measureText(o.title).width > maxTitleW && ts > 14 * k) { ts *= 0.95; c.font = T.titleFont.replace("{s}", Math.round(ts)); } // shrink to fit instead of cutting the title off
     if (T.glow) { c.shadowColor = T.glow; c.shadowBlur = 18 * k; }
     const y = pad + titleSize * 0.8, tx = align === "center" ? W / 2 : pad;
-    c.fillText(fit(c, o.title, W - pad * 2 - (T.ornament ? 160 * k : 0)), tx, y);
+    c.fillText(fit(c, o.title, maxTitleW), tx, y);
     c.shadowBlur = 0;
     if (T.ornament && align === "center") {
-      const tw = Math.min(c.measureText(o.title).width, W - pad * 2 - 160 * k);
+      const tw = Math.min(c.measureText(o.title).width, maxTitleW);
       c.font = `${Math.round(titleSize * 0.5)}px "Segoe UI Symbol", sans-serif`;
       c.fillText(T.ornament, W / 2 - tw / 2 - 44 * k, y - titleSize * 0.18); c.fillText(T.ornament, W / 2 + tw / 2 + 44 * k, y - titleSize * 0.18);
     }
   }
   if (o.subtitle) {
-    c.font = T.mono ? `400 ${Math.round(14 * k)}px ${T.labelFont}` : `400 ${Math.round(22 * k)}px ${SANS}`; c.fillStyle = T.sub; c.textAlign = align === "center" ? "center" : "left";
-    c.fillText(fit(c, o.subtitle, W - pad * 2), align === "center" ? W / 2 : pad, pad + titleH + 14 * k);
+    const sf = Math.round(m.subFont * (T.mono ? 0.64 : 1));
+    c.font = T.mono ? `400 ${sf}px ${T.labelFont}` : `400 ${sf}px ${SANS}`; c.fillStyle = T.sub; c.textAlign = align === "center" ? "center" : "left";
+    c.fillText(fit(c, o.subtitle, W - pad * 2), align === "center" ? W / 2 : pad, pad + titleH + m.subFont * 0.64);
   }
 }
 function drawFooter(c, T, o, W, H, k, m) {
@@ -351,8 +357,7 @@ async function renderTierImage(canvas, o) {
   const total = shown.reduce((s, r) => s + r.items.length, 0);
 
   const pad = T.pad * k, labelW = T.labelW * k, rowPad = T.rowPad * k, rowGap = T.rowGap * k, gap = 10 * k;
-  const titleSize = T.titleSize * k, titleH = o.title ? titleSize + 36 * k : 8 * k, subH = o.subtitle ? 40 * k : 0, footH = o.footer ? 50 * k : 24 * k;
-  const top = pad + titleH + subH;
+  const hm = headerMetrics(T, o, k), footH = hm.footH, top = hm.top;
   const innerW = W - pad * 2 - labelW - rowPad * 2;
   const ratio = 1.25;
   const namesN = +o.names;
@@ -378,7 +383,7 @@ async function renderTierImage(canvas, o) {
   c.setTransform(pxScale, 0, 0, pxScale, 0, 0);
   T.bg(c, W, H, k);
 
-  drawHeader(c, T, o, W, k, { pad, titleSize, titleH });
+  drawHeader(c, T, o, W, k, hm);
 
   const imgs = new Map(); const all = shown.flatMap((r) => r.items);
   for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
@@ -462,7 +467,7 @@ function drawCard(c, img, x, y, w, h, r, T, label, k) {
 function openTierExport() {
   const dlg = $("#exportDlg");
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(EXPORT_KEY)) || {}; } catch (e) { /* ignore */ }
-  const o = { style: "pastel", title: state.name, subtitle: "", footer: "", size: "auto:1600", card: "100", names: "1", hideEmpty: true, pool: false, scale: "1", fmt: "png", ...saved };
+  const o = { style: "pastel", title: state.name, subtitle: "", footer: "", size: "auto:1600", card: "100", names: "1", hideEmpty: true, pool: false, scale: "1", fmt: "png", titleScale: 100, subScale: 100, headGap: 100, ...saved };
   o.title = state.name;
   if (!EXPORT_STYLES[o.style]) o.style = "pastel";
   $("#exStyles").innerHTML = Object.entries(EXPORT_STYLES).map(([id, s]) =>
@@ -472,6 +477,7 @@ function openTierExport() {
   const sync = () => {
     $("#exTitle").value = o.title; $("#exSub").value = o.subtitle; $("#exFoot").value = o.footer; $("#exSize").value = o.size; $("#exCard").value = o.card;
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
+    for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier; $("#exPool").closest("label").hidden = noTier;
   };
@@ -487,7 +493,9 @@ function openTierExport() {
   const soon = () => { clearTimeout(timer); timer = setTimeout(draw, 250); };
   dlg.oninput = dlg.onchange = () => {
     Object.assign(o, { title: $("#exTitle").value, subtitle: $("#exSub").value, footer: $("#exFoot").value, size: $("#exSize").value, card: $("#exCard").value,
-      scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked });
+      scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked,
+      titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value });
+    for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) $(id).nextElementSibling.textContent = o[f] + "%";
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn"); soon();
   };
   $("#exStyles").onclick = (e) => { const b = e.target.closest("[data-style]"); if (!b) return; o.style = b.dataset.style; $$("[data-style]", dlg).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); soon(); };

@@ -112,10 +112,13 @@
       <label>Title <input id="exTitle" maxlength="80"></label>
       <label>Subtitle <input id="exSub" maxlength="100" placeholder="optional"></label>
       <label>Footer <input id="exFoot" maxlength="100" placeholder="optional, e.g. koilog.moe/u/you"></label>
+      <label class="rng">Title size <input type="range" id="exTitleScale" min="40" max="250" step="5"><output></output></label>
+      <label class="rng">Subtitle size <input type="range" id="exSubScale" min="40" max="250" step="5"><output></output></label>
+      <label class="rng">Space under the title <input type="range" id="exHeadGap" min="0" max="200" step="5"><output></output></label>
       <label>Image size <select id="exSize"></select></label>
       <div class="row">
         <label>Card size <select id="exCard"></select></label>
-        <label>Pixel density <select id="exScale"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+        <label>Pixel density <select id="exScale"><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="2.5">2.5×</option></select></label>
       </div>
       <div class="row">
         <label>Format <select id="exFmt"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
