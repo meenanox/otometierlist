@@ -148,3 +148,31 @@ body.kind-games{--card-ratio:1.42}
 body.kind-games .card img,body.kind-games .card .ph{aspect-ratio:1 / 1.42;object-position:center}
 body.kind-games .card figcaption{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .tabs button[hidden]{display:none}
+
+/* ---- awards ---- */
+.awards{display:grid;gap:12px}
+.awards-empty{background:var(--panel);border:1px dashed var(--line);border-radius:14px;padding:24px;text-align:center}
+.award{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0}
+.award header{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.atitle{flex:1;min-width:0;font:700 clamp(16px,1.6vw,20px) "Cormorant Garamond",Georgia,serif;color:var(--accent);border-color:transparent;background:transparent}
+.atitle:hover,.atitle:focus{border-color:var(--line);background:var(--panel)}
+.actl{display:flex;gap:2px}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;align-items:end}
+.pslot{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.pcard{position:relative;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-height:calc(var(--card-w) * 1.1)}
+.pcard .card{width:min(100%,var(--card-w))}
+.pempty{width:min(100%,var(--card-w));aspect-ratio:1/1.25;border:2px dashed var(--line);border-radius:8px;display:grid;place-items:center;color:var(--muted);font-weight:600}
+body.kind-games .pempty{aspect-ratio:1/1.42}
+.agame{color:var(--muted);font-size:10.5px;text-align:center;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aclear{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;padding:0;line-height:1;background:#000a;color:#fff;border:0;font-size:11px;opacity:0;transition:opacity .15s}
+.pcard:hover .aclear,.aclear:focus{opacity:1}
+.pstep{width:100%;display:grid;place-items:center;font:700 22px "Cormorant Garamond",Georgia,serif;color:#2a2230;border-radius:8px 8px 0 0}
+.pstep.s1{height:58px;background:#d9ad45}.pstep.s2{height:40px;background:#aeb6c1}.pstep.s3{height:28px;background:#c0804f}
+.ablurb{width:100%;font-size:12px;padding:4px 6px}
+.pslot.p1 .ablurb{font-weight:600}
+.award-list fieldset{border:1px solid var(--line);border-radius:10px;margin:0 0 8px;padding:6px 10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 12px}
+.award-list legend{padding:0 6px;color:var(--muted);font-size:12px}
+.card-menu .cm-row{display:flex;align-items:center;gap:4px;padding:3px 8px}
+.card-menu .cm-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-menu .cm-row button{padding:2px 7px;font-size:12px;border:1px solid var(--line)}
+.card-menu .cm-row button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}

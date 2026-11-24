@@ -14,7 +14,7 @@
   <div class="top-actions">
     <input id="listName" value="My character tier list" aria-label="List name">
     <span class="seg" id="kindSeg" title="Two separate lists"><button data-kind="characters" aria-pressed="true">Characters</button><button data-kind="games" aria-pressed="false">Games</button></span>
-    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button></span>
+    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button></span>
     <button id="btnImport" class="primary">Import characters</button>
     <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
     <button id="btnTiers" class="ghost">Edit ranks</button>
@@ -34,7 +34,14 @@
 </header>
 
 <main>
-  <div class="board-wrap"><div id="vennBar" class="venn-bar" hidden></div><div id="axisBar" class="venn-bar" hidden></div><section id="board" class="board" aria-label="Board"></section></div>
+  <div class="board-wrap"><div id="vennBar" class="venn-bar" hidden></div><div id="axisBar" class="venn-bar" hidden></div>
+    <div id="awardsBar" class="venn-bar" hidden>
+      <input id="awNew" placeholder="Type an award, e.g. Saddest route" maxlength="60" style="width:230px"><button id="awAdd" class="primary">Add</button>
+      <button id="awPick" class="ghost">Pick from list…</button>
+      <select id="awPack" aria-label="Add a pack"></select>
+      <label>Columns <select id="awCols"><option value="0">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+      <span class="muted">Drag or double-click characters onto a podium. The same one can win several awards.</span>
+    </div><section id="board" class="board" aria-label="Board"></section></div>
   <div id="resizer" class="resizer" title="Drag to resize the pool"></div>
   <aside class="pool-wrap">
     <div class="pool-head">
@@ -92,6 +99,14 @@
   </div>
 </dialog>
 
+<datalist id="blurbIdeas"><option value="Made me cry"><option value="No notes"><option value="Peak fiction"><option value="I'm not okay"><option value="Still thinking about it"><option value="Fell in love instantly"><option value="Slow burn done right"><option value="Unexpected favourite"><option value="Heartbreaking"><option value="Pure comfort"><option value="Chaotic in the best way"><option value="Underrated gem"><option value="Worth every red flag"><option value="Gorgeous throughout"><option value="Absolute banger"></datalist>
+
+<dialog id="awardDlg" class="sheet">
+  <header class="sheet-head"><h2>Pick awards</h2><button class="icon" data-close aria-label="Close">✕</button></header>
+  <div class="sheet-body"><input id="awFilter" type="search" placeholder="Filter…"><div id="awList" class="award-list"></div></div>
+  <footer class="sheet-foot"><button class="ghost" data-close>Cancel</button><button class="primary" id="awAddSel">Add selected</button></footer>
+</dialog>
+
 <dialog id="tiersDlg" class="sheet">
   <header class="sheet-head"><h2>Edit ranks</h2><button class="icon" data-close aria-label="Close">✕</button></header>
   <div class="sheet-body">
@@ -145,7 +160,7 @@
         <label>Names <select id="exNames"><option value="0">None</option><option value="1">Name only</option><option value="2">Name + game</option></select></label>
       </div>
       <label>Heroines <select id="exHeroes"><option value="show">Include</option><option value="hide">Leave out</option><option value="only">Only heroines</option></select></label>
-      <label class="inline"><input type="checkbox" id="exHide" checked> Hide empty tiers</label>
+      <label class="inline"><input type="checkbox" id="exHide" checked> <span id="exHideT">Hide empty tiers</span></label>
       <label class="inline"><input type="checkbox" id="exPool"> Include unranked characters</label>
       <small id="exInfo" class="muted"></small>
     </div>

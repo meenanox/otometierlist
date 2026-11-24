@@ -195,7 +195,110 @@ async function loadFonts() {
   try { await Promise.all(["600 40px 'Cormorant Garamond'", "700 20px Orbitron", "20px 'Press Start 2P'"].map((f) => document.fonts.load(f))); } catch (e) { /* system fonts */ }
 }
 
-async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : renderTierImage(canvas, o); }
+async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : state.mode === "awards" ? renderAwardsImage(canvas, o) : renderTierImage(canvas, o); }
+
+async function renderAwardsImage(canvas, o) {
+  const T = EXPORT_STYLES[o.style] || EXPORT_STYLES.pastel, { fixed, W, fh, k } = frameOf(o);
+  await loadFonts();
+  const A = state.awards, dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style), namesN = +o.names;
+  let cats = A.cats.map((c) => ({ ...c, items: c.slots.map((s) => (s && visible(s) ? { key: s, ...state.items[s] } : null)) }));
+  if (o.hideEmpty) cats = cats.filter((c) => c.items.some(Boolean));
+  const medal = ["#d9ad45", "#aeb6c1", "#c0804f"], ratio = state.kind === "games" ? 1.42 : 1.25;
+  const mc = document.createElement("canvas").getContext("2d");
+  const m = headerMetrics(T, o, k), pad = T.pad * k, bottom = m.footH + pad * 0.4, gap = 20 * k;
+  const colsFor = (Wc) => Math.max(1, Math.min(cats.length || 1, A.cols || (Wc >= 1400 ? 3 : Wc >= 850 ? 2 : 1)));
+
+  // measure one award card at width cw (everything scales with the card width)
+  const measure = (c, cw) => {
+    const u = cw / 520, ip = 20 * u, slotW = (cw - ip * 2 - 20 * u) / 3, pcw = Math.max(16, Math.min(slotW * 0.9, (+o.card || 100) * k)), pch = pcw * ratio;
+    const nameFs = Math.max(9 * k, Math.min(18 * u, pcw * 0.15)), nameBlock = namesN ? nameFs * 1.25 * (namesN === 2 ? 3 : 2) + 6 * u : 4 * u;
+    const steps = [60 * u, 42 * u, 30 * u], titleH = 56 * u;
+    const podiumH = Math.max(...steps.map((s) => s + pch + nameBlock + 6 * u));
+    const blurbs = [];
+    c.blurbs.forEach((t, i) => {
+      if (!t || !c.items[i]) return;
+      const fs = (i === 0 ? 17 : 14) * u; mc.font = `${i === 0 ? "italic 600" : "italic 400"} ${Math.round(fs)}px ${SANS}`;
+      blurbs.push({ i, fs, lines: wrapLines(mc, t, cw - ip * 2 - 30 * u, i === 0 ? 3 : 2) });
+    });
+    const blurbH = blurbs.reduce((s, b) => s + b.lines.length * b.fs * 1.3 + 8 * u, 0);
+    return { u, ip, slotW, pcw, pch, nameFs, nameBlock, steps, titleH, podiumH, blurbs, blurbH, h: ip + titleH + podiumH + blurbH + ip };
+  };
+  const layout = (Wc) => {
+    const cols = colsFor(Wc), cw = (Wc - gap * (cols - 1)) / cols, rows = [];
+    for (let i = 0; i < cats.length; i += cols) { const row = cats.slice(i, i + cols).map((c) => ({ c, M: measure(c, cw) })); rows.push({ row, h: Math.max(...row.map((r) => r.M.h)) }); }
+    return { cols, cw, rows, H: rows.reduce((s, r) => s + r.h, 0) + gap * Math.max(0, rows.length - 1) };
+  };
+  let sc = 1, L = layout(W - pad * 2), H;
+  if (fixed) {
+    H = fh;
+    for (; sc > 0.3; sc -= 0.04) { L = layout((W - pad * 2) / sc); if (m.top + L.H * sc + bottom <= fh) break; }
+  } else H = Math.round(m.top + L.H + bottom);
+  const pxScale = Math.min(+o.scale || 1, Math.sqrt(90e6 / (W * H)), 16000 / H, 16000 / W);
+  canvas.width = Math.round(W * pxScale); canvas.height = Math.round(H * pxScale);
+  const c = canvas.getContext("2d"); c.setTransform(pxScale, 0, 0, pxScale, 0, 0);
+  T.bg(c, W, H, k); drawHeader(c, T, o, W, k, m);
+
+  const all = cats.flatMap((q) => q.items.filter(Boolean)), imgs = new Map();
+  const real = Math.max(...L.rows.flatMap((r) => r.row.map((x) => x.M.pcw)), 1) * sc * pxScale;
+  for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(pickImg(it, real)))));
+
+  if (!cats.length) {
+    c.fillStyle = T.sub; c.font = `italic 600 ${Math.round(22 * k)}px ${SANS}`; c.textAlign = "center"; c.fillText("No awards yet", W / 2, m.top + 60 * k);
+    drawFooter(c, T, o, W, H, k, m); return { w: W, h: H, px: [canvas.width, canvas.height], cards: 0, card: 0, missing: 0 };
+  }
+  c.save(); c.translate(pad, m.top); c.scale(sc, sc);
+  let y = 0;
+  for (const { row, h } of L.rows) {
+    row.forEach(({ c: cat, M }, ci) => {
+      const x = ci * (L.cw + gap), u = M.u;
+      // panel
+      c.save();
+      if (T.rowShadow) { c.shadowColor = T.rowShadow; c.shadowBlur = 18 * u; c.shadowOffsetY = 6 * u; }
+      c.fillStyle = T.rowFill || (dark ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.55)"); rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.fill(); c.restore();
+      const edge = T.rowStroke === "tier" ? medal[0] : T.rowStroke || (dark ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.12)");
+      c.save(); c.strokeStyle = edge; c.lineWidth = Math.max(1, (T.rowLine || 1.5) * u); if (T.rowGlow) { c.shadowColor = medal[0]; c.shadowBlur = T.rowGlow * u; } rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.stroke(); c.restore();
+      // title
+      c.save(); c.fillStyle = T.title; c.textAlign = "center"; c.textBaseline = "middle"; if (T.glow) { c.shadowColor = T.glow; c.shadowBlur = 10 * u; }
+      let fs = 30 * u * (T.mono ? 0.5 : 1); c.font = `700 ${Math.round(fs)}px ${T.labelFont}`;
+      while (c.measureText(cat.title).width > L.cw - M.ip * 2 && fs > 9 * k) { fs *= 0.94; c.font = `700 ${Math.round(fs)}px ${T.labelFont}`; }
+      c.fillText(cat.title, x + L.cw / 2, y + M.ip + M.titleH / 2 - 4 * u); c.restore();
+      c.save(); c.strokeStyle = medal[0]; c.globalAlpha = 0.7; c.lineWidth = Math.max(1, 2 * u); c.beginPath(); c.moveTo(x + L.cw / 2 - 40 * u, y + M.ip + M.titleH - 6 * u); c.lineTo(x + L.cw / 2 + 40 * u, y + M.ip + M.titleH - 6 * u); c.stroke(); c.restore();
+      // podium: 2nd | 1st | 3rd, standing on a common baseline
+      const baseY = y + M.ip + M.titleH + M.podiumH, slotX = [1, 0, 2].map((p, n) => x + M.ip + n * (M.slotW + 10 * u));
+      [1, 0, 2].forEach((p, n) => {
+        const sx = slotX[n], cx = sx + M.slotW / 2, stepH = M.steps[p], it = cat.items[p], top = baseY - stepH;
+        c.fillStyle = medal[p]; rr(c, sx, top, M.slotW, stepH, Math.min(8 * u, T.radius > 0 ? 8 * u : 0)); c.fill();
+        c.fillStyle = "#2a2230"; c.font = `700 ${Math.round(26 * u * (T.mono ? 0.5 : 1))}px ${T.labelFont}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(p + 1), cx, top + stepH / 2 + 1 * u);
+        const cy = top - 6 * u - M.pch - M.nameBlock;
+        if (it) {
+          drawCard(c, imgs.get(it.key), cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k, T, it.label, k);
+          c.save(); c.strokeStyle = medal[p]; c.lineWidth = Math.max(1.5, (p === 0 ? 4 : 2.5) * u); rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
+          if (namesN) {
+            c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillStyle = T.names; c.font = `600 ${Math.round(M.nameFs)}px ${T.mono ? T.labelFont : SANS}`;
+            const lines = wrapLines(c, it.label, M.pcw + 14 * u, 2); lines.forEach((l, li) => c.fillText(l, cx, cy + M.pch + M.nameFs * 1.1 + li * M.nameFs * 1.25 + 3 * u));
+            if (namesN === 2 && it.game) { c.save(); c.globalAlpha = 0.75; c.fillStyle = T.sub; c.font = `400 ${Math.round(M.nameFs * 0.8)}px ${T.mono ? T.labelFont : SANS}`; c.fillText(fit(c, it.game, M.slotW), cx, cy + M.pch + M.nameFs * 1.1 + lines.length * M.nameFs * 1.25 + 3 * u); c.restore(); }
+          }
+        } else {
+          c.save(); c.setLineDash([6 * u, 5 * u]); c.strokeStyle = T.sub; c.globalAlpha = 0.4; c.lineWidth = Math.max(1, 2 * u); rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
+        }
+      });
+      // blurbs
+      let by = baseY + 8 * u;
+      for (const b of M.blurbs) {
+        c.fillStyle = medal[b.i]; c.beginPath(); c.arc(x + M.ip + 11 * u, by + b.fs * 0.72, 10 * u, 0, 7); c.fill();
+        c.fillStyle = "#2a2230"; c.font = `700 ${Math.round(12 * u)}px ${SANS}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(b.i + 1), x + M.ip + 11 * u, by + b.fs * 0.72 + 0.5 * u);
+        c.fillStyle = T.names; c.textAlign = "left"; c.textBaseline = "alphabetic"; c.font = `${b.i === 0 ? "italic 600" : "italic 400"} ${Math.round(b.fs)}px ${SANS}`;
+        b.lines.forEach((l, li) => c.fillText(l, x + M.ip + 30 * u, by + b.fs + li * b.fs * 1.3));
+        by += b.lines.length * b.fs * 1.3 + 8 * u;
+      }
+    });
+    y += h + gap;
+  }
+  c.restore();
+  drawFooter(c, T, o, W, H, k, m);
+  return { w: W, h: H, px: [canvas.width, canvas.height], cards: all.length, card: Math.round(L.rows[0].row[0].M.pcw), missing: all.filter((it) => (it.imgHi || it.img) && !imgs.get(it.key)).length };
+}
+
 
 function wrapLines(c, text, maxW, maxLines = 3) {
   const words = String(text).split(/\s+/), lines = []; let cur = "";
@@ -481,8 +584,9 @@ function openTierExport() {
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
     $("#exHeroes").value = state.ui.heroines; $("#exHeroes").closest("label").hidden = state.kind === "games";
-    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn");
-    const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier; $("#exPool").closest("label").hidden = noTier;
+    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards");
+    const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier && state.mode !== "awards"; $("#exPool").closest("label").hidden = noTier;
+    $("#exHideT").textContent = state.mode === "awards" ? "Hide awards with no winners" : "Hide empty tiers";
   };
   sync();
   let run = 0, timer = 0;
@@ -500,7 +604,7 @@ function openTierExport() {
       scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked,
       titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value });
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) $(id).nextElementSibling.textContent = o[f] + "%";
-    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn"); soon();
+    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards"); soon();
   };
   $("#exStyles").onclick = (e) => { const b = e.target.closest("[data-style]"); if (!b) return; o.style = b.dataset.style; $$("[data-style]", dlg).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); soon(); };
   const mime = () => ({ png: "image/png", jpeg: "image/jpeg", webp: "image/webp" }[o.fmt]);

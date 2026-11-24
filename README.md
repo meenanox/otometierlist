@@ -15,9 +15,10 @@ Maintainers: run `python make_zip.py` after changing the app and commit the refr
 - **VNDB:** VN ids (`v17, v2002`) or a VNDB username / user id.
 - **Search by name:** KoiLog games, VNDB games, VNDB characters.
 
-## Three modes
+## Four modes
 - **Tier list:** drag characters onto ranks, or **double-click** a character and pick the rank from the menu (also works in Venn and axis modes; the menu also has Back to pool, Mark as heroine and Remove). **Auto-rank by rating** uses your KoiLog character ratings.
 - **Axis chart:** a cross chart (like an alignment chart). Drag characters anywhere on it. Set the four end labels, grid size (or none), square or wide shape, optional numbered scale, snap-to-grid, axis/grid colours and corner labels. **Auto-plot from ratings** puts personality left to right and looks bottom to top.
+- **Awards:** an awards ceremony with a podium (1st, 2nd, 3rd) for each award, plus a one-line blurb for why each won. Choose awards from a list (characters, routes, overall; or for games), add a pack (Classic, Chaos, Cry-fest), or type your own, like "Saddest route". Drag characters onto the podium, or double-click one and pick an award and place. The same character can win many awards. **Auto-nominate from ratings** fills Best design, Best voice acting, Best personality, Best writing and Favourite overall from your KoiLog ratings (Best overall from your VNDB votes for games). Export has its own medal layout in all 8 styles and 17 sizes.
 - **Venn diagram:** 2 or 3 circles with your own names and colours. Drop a character where circles overlap to put them in several groups. **Auto-fill from ratings** makes Looks / Personality / Voice circles from your 5★ aspect ratings.
 
 ## Game tier lists

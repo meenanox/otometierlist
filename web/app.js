@@ -23,7 +23,8 @@ const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
 const makeAxis = () => ({ xMin: "Hate", xMax: "Love", yMin: "Villain", yMax: "Hero", grid: 10, aspect: "square", numbers: false, nMin: -5, nMax: 5,
   snap: false, axisColor: "", gridColor: "", quad: ["", "", "", ""], pos: {} });
-const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null };
+const makeAwards = () => ({ cols: 0, cats: [] });
+const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null, awards: makeAwards() };
 let selected = null;
 
 // ---------- persistence ----------
@@ -34,7 +35,7 @@ function load(doc) {
   state.tiers = doc.tiers.map((t) => ({ id: t.id || newId(), name: t.name || "", color: t.color || "#888888", keys: (t.keys || []).filter((k) => doc.items && doc.items[k]) }));
   state.items = doc.items || {};
   state.order = (doc.order || Object.keys(state.items)).filter((k) => state.items[k]);
-  state.mode = doc.mode === "venn" || doc.mode === "axis" ? doc.mode : "tier";
+  state.mode = ["venn", "axis", "awards"].includes(doc.mode) ? doc.mode : "tier";
   const v = doc.venn;
   if (v && Array.isArray(v.circles) && v.circles.length >= 2) {
     state.venn = { n: v.n === 2 ? 2 : 3, size: +v.size || 100, overlap: v.overlap ?? 55, regions: {},
@@ -46,6 +47,10 @@ function load(doc) {
   for (const [k, p] of Object.entries(ax.pos || {})) if (state.items[k] && p && isFinite(p.x) && isFinite(p.y)) state.axis.pos[k] = { x: +p.x, y: +p.y };
   state.ui = { ...DEFAULT_UI, ...(doc.ui || {}) };
   state.customPresets = doc.customPresets && typeof doc.customPresets === "object" ? doc.customPresets : {};
+  const aw = doc.awards || {};
+  state.awards = { cols: Math.min(4, Math.max(0, +aw.cols || 0)), cats: (Array.isArray(aw.cats) ? aw.cats : []).filter((c) => c && typeof c.title === "string").slice(0, 80).map((c) => ({
+    id: c.id || newId(), title: c.title.slice(0, 60), auto: c.auto || "",
+    slots: [0, 1, 2].map((i) => (c.slots && state.items[c.slots[i]] ? c.slots[i] : null)), blurbs: [0, 1, 2].map((i) => String(c.blurbs?.[i] || "").slice(0, 120)) })) };
   state.kind = doc.kind === "games" ? "games" : "characters";
   const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
   return true;
@@ -53,12 +58,12 @@ function load(doc) {
 try { load(JSON.parse(localStorage.getItem(STORE))); } catch (e) { /* first run */ }
 
 // ---------- two lists: characters and games ----------
-const LIST_KEYS = ["name", "mode", "tiers", "items", "order", "venn", "axis"];
-const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis() });
+const LIST_KEYS = ["name", "mode", "tiers", "items", "order", "venn", "axis", "awards"];
+const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), awards: makeAwards() });
 function switchKind(kind) {
   if (kind === state.kind) return;
   const snap = Object.fromEntries(LIST_KEYS.map((k) => [k, state[k]]));
-  const next = state.other || freshList(kind);
+  const next = state.other || freshList(kind); next.awards ||= makeAwards();
   LIST_KEYS.forEach((k) => (state[k] = next[k]));
   state.other = snap; state.kind = kind; selected = null; save(); renderVennBar.lastMode = null;
   render(); syncImportTabs();
@@ -81,7 +86,7 @@ const heroOk = (it) => { if (state.kind === "games") return true; const m = stat
 const visible = (k) => !!state.items[k] && heroOk(state.items[k]);
 const roleOf = (r) => ({ protagonist: "heroine", main: "heroine", love_interest: "love", primary: "love", side: "side" }[r] || "other");
 const roleOk = (role, who) => who === "all" || (role === "heroine" && (who === "love+heroine" || who === "heroine")) || (role === "love" && (who === "love" || who === "love+heroine"));
-const placed = () => new Set(state.mode === "venn" ? Object.values(state.venn.regions).flat() : state.mode === "axis" ? Object.keys(state.axis.pos) : state.tiers.flatMap((t) => t.keys));
+const placed = () => new Set(state.mode === "awards" ? [] : state.mode === "venn" ? Object.values(state.venn.regions).flat() : state.mode === "axis" ? Object.keys(state.axis.pos) : state.tiers.flatMap((t) => t.keys));
 
 async function mapPool(list, n, fn) {
   let i = 0;
@@ -100,7 +105,7 @@ function applyUi() {
   r.setProperty("--axis-card", u.axisCard);
   const games = state.kind === "games";
   document.body.classList.toggle("kind-games", games);
-  $("#heroFilter").hidden = games; $("#btnAuto").hidden = games && state.mode !== "tier";
+  $("#heroFilter").hidden = games; $("#btnAuto").hidden = games && state.mode !== "tier" && state.mode !== "awards";
   $("#kindSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === state.kind)));
   document.body.classList.toggle("is-venn", state.mode === "venn");
   document.body.classList.toggle("is-axis", state.mode === "axis");
@@ -184,8 +189,10 @@ function render() {
   applyUi();
   if (renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderAxisBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
-  $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", tier: "Auto-rank by rating" }[state.mode];
-  if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
+  $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode];
+  $("#awardsBar").hidden = state.mode !== "awards"; $("#awCols").value = String(state.awards.cols); fillPackMenu();
+  if (state.mode === "awards") $("#board").innerHTML = awardsBoardHtml();
+  else if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
   else if (venn) $("#board").innerHTML = vennBoardHtml();
   else $("#board").innerHTML = state.tiers.map((t) => `
     <div class="tier" data-tier="${t.id}">
@@ -221,6 +228,7 @@ function render() {
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
 function moveKey(key, dest, beforeKey, at) {
+  if (state.mode === "awards") { if (dest === "award" && at) placeAward(key, at); selected = null; save(); render(); return; }
   if (state.mode === "axis") { if (dest === "axis" && at) state.axis.pos[key] = at; else delete state.axis.pos[key]; selected = null; save(); render(); return; }
   const lists = state.mode === "venn" ? Object.values(state.venn.regions) : state.tiers.map((t) => t.keys);
   lists.forEach((arr) => { const i = arr.indexOf(key); if (i >= 0) arr.splice(i, 1); });
@@ -241,6 +249,11 @@ function vennRegionAt(e) {
   return g.keyAt((e.clientX - r.left) / r.width * 100, (e.clientY - r.top) / r.height * g.vh);
 }
 function dropTarget(e) {
+  if (state.mode === "awards") {
+    if (e.target.closest("#pool")) return { tier: "", before: null };
+    if (e.target.closest("button,input")) return null;
+    const s = e.target.closest("[data-slot]"); return s ? { tier: "award", before: null, at: s.dataset.slot } : null;
+  }
   if (state.mode === "axis") {
     if (e.target.closest("#pool")) return { tier: "", before: null };
     const at = axisPointAt(e); return at ? { tier: "axis", before: null, at } : null;
@@ -269,7 +282,7 @@ document.addEventListener("dragstart", (e) => {
   const c = e.target.closest?.(".card"); if (!c) return;
   e.dataTransfer.setData("text/plain", c.dataset.key); e.dataTransfer.effectAllowed = "move";
 });
-document.addEventListener("dragover", (e) => { if (e.target.closest?.("[data-tier], #venn, #axis")) e.preventDefault(); });
+document.addEventListener("dragover", (e) => { if (e.target.closest?.("[data-tier], #venn, #axis, [data-slot]")) e.preventDefault(); });
 document.addEventListener("drop", (e) => {
   const key = e.dataTransfer.getData("text/plain"); const d = dropTarget(e);
   if (!key || !state.items[key] || !d) return;
@@ -298,6 +311,7 @@ function removeItem(key) {
   state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => k !== key)));
   Object.values(state.venn.regions).forEach((a) => { const j = a.indexOf(key); if (j >= 0) a.splice(j, 1); });
   delete state.axis.pos[key];
+  state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s))));
   delete state.items[key]; state.order = state.order.filter((k) => k !== key); save(); render();
 }
 
@@ -755,24 +769,26 @@ function autoFillVenn(rated) {
 $("#btnAuto").onclick = () => {
   const rated = state.order.filter((k) => state.items[k]?.rating);
   if (!rated.length) return toast(state.kind === "games" ? "No VNDB votes loaded. Import a VNDB user list that has votes." : "No KoiLog character ratings loaded. Import a KoiLog user with ratings ticked.", "error");
+  if (state.mode === "awards") { const n = autoAwards(); save(); render(); return toast(n ? `Nominated winners for ${n} award${n === 1 ? "" : "s"} from your ratings` : "None of your awards can be filled from ratings (try Best design, Best voice acting or Favourite overall)", n ? "" : "error"); }
   if (state.mode === "axis") { const n = autoPlotAxis(rated); save(); render(); return toast(n ? `Plotted ${n} characters by your ratings` : "No characters with looks and personality ratings (re-import to refresh)", n ? "" : "error"); }
   if (state.mode === "venn") { const n = autoFillVenn(rated); save(); render(); return toast(n ? `Placed ${n} characters by your ratings` : "None of your rated characters have a 5★ aspect (re-import to refresh)", n ? "" : "error"); }
   autoRankTiers(rated); save(); render(); toast(`Placed ${rated.length} characters by your rating`);
 };
 $("#btnReset").onclick = () => {
-  if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else state.tiers.forEach((t) => (t.keys = []));
+  if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else if (state.mode === "awards") state.awards.cats.forEach((c) => (c.slots = [null, null, null])); else state.tiers.forEach((t) => (t.keys = []));
   save(); render(); $("#btnReset").closest("details").open = false;
 };
 // Reset character pool: removes the unranked characters shown in the pool; anything already on the board stays.
 function resetPool() {
-  const here = placed(), keys = state.order.filter((k) => state.items[k] && !here.has(k));
+  const here = state.mode === "awards" ? awardKeys() : placed(), keys = state.order.filter((k) => state.items[k] && !here.has(k));
   if (!keys.length) return toast("The pool is already empty");
-  const elsewhere = new Set([...state.tiers.flatMap((t) => t.keys), ...Object.values(state.venn.regions).flat(), ...Object.keys(state.axis.pos)]);
+  const elsewhere = new Set([...state.tiers.flatMap((t) => t.keys), ...Object.values(state.venn.regions).flat(), ...Object.keys(state.axis.pos), ...awardKeys()]);
   const other = keys.filter((k) => elsewhere.has(k)).length;
   if (!confirm(`Remove ${keys.length} unranked character${keys.length === 1 ? "" : "s"} from the pool?` + (other ? `\n${other} of them are placed in another view (tier list, Venn or axis chart) and will be removed from there too.` : "") + "\nCharacters already on this board stay.")) return;
   const gone = new Set(keys);
   state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => !gone.has(k))));
   Object.values(state.venn.regions).forEach((a) => { for (let i = a.length - 1; i >= 0; i--) if (gone.has(a[i])) a.splice(i, 1); });
+  state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (gone.has(s) ? null : s))));
   keys.forEach((k) => { delete state.axis.pos[k]; delete state.items[k]; });
   state.order = state.order.filter((k) => !gone.has(k));
   selected = null; save(); render(); toast(`Removed ${keys.length} from the pool`);
@@ -781,7 +797,7 @@ $("#btnPoolReset").onclick = () => { resetPool(); $("#btnPoolReset").closest("de
 $("#btnPoolReset2").onclick = resetPool;
 $("#btnClear").onclick = () => {
   if (!confirm("Remove every character from this list? Ranks and circles are kept.")) return;
-  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
+  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; state.awards.cats.forEach((c) => (c.slots = [null, null, null])); state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
 };
 $("#btnSave").onclick = () => {
   const a = document.createElement("a");
@@ -849,6 +865,123 @@ $("#pool").addEventListener("click", (e) => {
   else Object.values(state.items).forEach((it) => { delete it.heroine; });
   save(); render();
 });
+// ---------- awards: podiums with blurbs ----------
+const AWARD_LIB = {
+  characters: [
+    ["Characters", [["Best design", "looks"], ["Best voice acting", "voice"], ["Best personality", "personality"], ["Best glow-up / development"], ["Best villain"], ["Best side character"], ["Best heroine"],
+      ["Character you hated, then loved"], ["Most red flags (but loved anyway)"], ["Most likely to need therapy"], ["Best \"I'd die for him\""], ["Best hair"], ["Best outfit"], ["Best dramatic entrance"], ["Best mom-friend / dad-friend"], ["Cutest"]]],
+    ["Routes", [["Saddest route"], ["Best route ending"], ["Best bad end"], ["Best slow burn"], ["Most wholesome route"], ["Most unhinged route"], ["Spiciest route"], ["Most disappointing route"],
+      ["Best confession scene"], ["Best plot twist"], ["Best true route"], ["Best kiss scene"], ["Most convoluted route"], ["Best writing", "story"]]],
+    ["Overall", [["Favourite overall", "rating"], ["Best romance"], ["Most underrated"], ["Most overhyped"]]],
+  ],
+  games: [
+    ["Games", [["Best overall", "rating"], ["Best romance"], ["Best story"], ["Best art / CGs"], ["Best soundtrack"], ["Best cast"], ["Best ending"], ["Best opening"], ["Best first impression"], ["Best UI / gameplay"], ["Best localization"], ["Best sequel / fandisc"]]],
+    ["Mood", [["Best cry"], ["Best comfort game"], ["Most convoluted plot"], ["Best mystery"], ["Best worldbuilding"], ["Most replayable"], ["Biggest surprise"], ["Most underrated"], ["Most overhyped"]]],
+  ],
+};
+const AWARD_PACKS = {
+  characters: { "Classic": ["Best design", "Best voice acting", "Best personality", "Best villain", "Best side character", "Favourite overall"],
+    "Chaos": ["Most red flags (but loved anyway)", "Most likely to need therapy", "Character you hated, then loved", "Most unhinged route", "Best dramatic entrance", "Best hair"],
+    "Cry-fest": ["Saddest route", "Best bad end", "Best confession scene", "Best slow burn", "Most wholesome route", "Best true route"] },
+  games: { "Classic": ["Best overall", "Best story", "Best art / CGs", "Best soundtrack", "Best romance", "Best cast"],
+    "Chaos": ["Most convoluted plot", "Most overhyped", "Biggest surprise", "Most underrated", "Best comfort game", "Best first impression"],
+    "Cry-fest": ["Best cry", "Best ending", "Best mystery", "Best worldbuilding", "Best sequel / fandisc", "Most replayable"] },
+};
+const awardLib = () => AWARD_LIB[state.kind === "games" ? "games" : "characters"];
+const autoOf = (title) => awardLib().flatMap(([, list]) => list).find(([t]) => t === title)?.[1] || "";
+function addAward(title, auto) {
+  title = String(title || "").trim().slice(0, 60); if (!title) return false;
+  state.awards.cats.push({ id: newId(), title, auto: auto ?? autoOf(title), slots: [null, null, null], blurbs: ["", "", ""] }); return true;
+}
+
+function awardsBoardHtml() {
+  const a = state.awards;
+  if (!a.cats.length) return `<div class="awards-empty"><p><b>No awards yet.</b></p><p class="muted">Type your own award above, choose <b>Pick from list</b>, or add a pack (Classic, Chaos, Cry-fest).</p></div>`;
+  const gridCols = a.cols ? `repeat(${a.cols},minmax(0,1fr))` : "repeat(auto-fill,minmax(320px,1fr))";
+  const order = [1, 0, 2];
+  return `<div class="awards" style="grid-template-columns:${gridCols}">${a.cats.map((c, ci) => `
+    <section class="award" data-cat="${esc(c.id)}">
+      <header><input class="atitle" data-cat="${esc(c.id)}" value="${esc(c.title)}" maxlength="60" aria-label="Award name">
+        <span class="actl"><button class="icon" data-aact="up" data-cat="${esc(c.id)}" ${ci ? "" : "disabled"} aria-label="Move up">↑</button><button class="icon" data-aact="down" data-cat="${esc(c.id)}" ${ci < a.cats.length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="icon" data-aact="del" data-cat="${esc(c.id)}" aria-label="Delete award">✕</button></span></header>
+      <div class="podium">${order.map((i) => {
+        const key = c.slots[i], it = key && visible(key) ? state.items[key] : null;
+        return `<div class="pslot p${i + 1}" data-slot="${esc(c.id)}:${i}">
+          <div class="pcard">${it ? `${cardHtml(key)}${it.game ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>
+          <div class="pstep s${i + 1}">${i + 1}</div>
+          <input class="ablurb" list="blurbIdeas" data-ab="${esc(c.id)}:${i}" value="${esc(c.blurbs[i])}" maxlength="120" placeholder="${i ? "why?" : "why it won…"}" aria-label="Blurb for place ${i + 1}"></div>`;
+      }).join("")}</div>
+    </section>`).join("")}</div>`;
+}
+
+function placeAward(key, at) {
+  const [cid, i] = at.split(":"), c = state.awards.cats.find((x) => x.id === cid); if (!c) return;
+  c.slots = c.slots.map((s, j) => (j === +i ? key : s === key ? null : s));   // a character can win many awards, but only one place in each
+}
+const awardKeys = () => new Set(state.awards.cats.flatMap((c) => c.slots.filter(Boolean)));
+
+// board edits (typing keeps focus: save without redrawing)
+$("#board").addEventListener("input", (e) => {
+  const t = e.target, a = state.awards;
+  if (t.classList.contains("atitle")) { const c = a.cats.find((x) => x.id === t.dataset.cat); if (c) { c.title = t.value; c.auto = autoOf(t.value); save(); } }
+  else if (t.dataset.ab) { const [cid, i] = t.dataset.ab.split(":"), c = a.cats.find((x) => x.id === cid); if (c) { c.blurbs[+i] = t.value; save(); } }
+});
+$("#board").addEventListener("click", (e) => {
+  const a = state.awards, b = e.target.closest("[data-aact],[data-aclear]"); if (!b) return;
+  e.stopPropagation();
+  if (b.dataset.aclear) { const [cid, i] = b.dataset.aclear.split(":"), c = a.cats.find((x) => x.id === cid); if (c) c.slots[+i] = null; }
+  else {
+    const i = a.cats.findIndex((x) => x.id === b.dataset.cat); if (i < 0) return;
+    if (b.dataset.aact === "up" && i > 0) [a.cats[i - 1], a.cats[i]] = [a.cats[i], a.cats[i - 1]];
+    else if (b.dataset.aact === "down" && i < a.cats.length - 1) [a.cats[i + 1], a.cats[i]] = [a.cats[i], a.cats[i + 1]];
+    else if (b.dataset.aact === "del") a.cats.splice(i, 1);
+  }
+  save(); render();
+});
+
+// the bar: type your own, pick from the list, add a pack, choose columns
+$("#awAdd").onclick = () => { if (addAward($("#awNew").value)) { $("#awNew").value = ""; save(); render(); } else toast("Type an award name first", "error"); };
+$("#awNew").onkeydown = (e) => e.key === "Enter" && $("#awAdd").click();
+$("#awCols").onchange = (e) => { state.awards.cols = +e.target.value; save(); render(); };
+function fillPackMenu() {
+  const packs = AWARD_PACKS[state.kind === "games" ? "games" : "characters"];
+  $("#awPack").innerHTML = `<option value="">Add a pack…</option>` + Object.keys(packs).map((k) => `<option value="${esc(k)}">${esc(k)} (${packs[k].length})</option>`).join("");
+}
+$("#awPack").onchange = (e) => {
+  const list = AWARD_PACKS[state.kind === "games" ? "games" : "characters"][e.target.value]; e.target.value = ""; if (!list) return;
+  const have = new Set(state.awards.cats.map((c) => c.title.toLowerCase()));
+  let n = 0; for (const t of list) if (!have.has(t.toLowerCase()) && addAward(t)) n++;
+  save(); render(); toast(n ? `Added ${n} awards` : "Those awards are already here");
+};
+$("#awPick").onclick = () => {
+  const have = new Set(state.awards.cats.map((c) => c.title.toLowerCase()));
+  $("#awList").innerHTML = awardLib().map(([group, list]) => `<fieldset><legend>${esc(group)}</legend>${list.map(([t, auto]) =>
+    `<label class="inline"><input type="checkbox" data-t="${esc(t)}" ${have.has(t.toLowerCase()) ? "checked disabled" : ""}> ${esc(t)}${auto ? ' <small class="muted" title="Can be nominated from your ratings">★ auto</small>' : ""}</label>`).join("")}</fieldset>`).join("");
+  $("#awFilter").value = ""; openDlg("#awardDlg");
+};
+$("#awFilter").oninput = (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  $$("#awList label").forEach((l) => (l.hidden = !!q && !l.textContent.toLowerCase().includes(q)));
+  $$("#awList fieldset").forEach((f) => (f.hidden = ![...f.querySelectorAll("label")].some((l) => !l.hidden)));
+};
+$("#awAddSel").onclick = () => {
+  const picks = $$("#awList input:checked:not(:disabled)").map((i) => i.dataset.t); picks.forEach((t) => addAward(t));
+  $("#awardDlg").close(); save(); render(); if (picks.length) toast(`Added ${picks.length} award${picks.length === 1 ? "" : "s"}`);
+};
+
+// Auto-nominate: the top three by your rating for awards that have a matching rating (looks, voice, personality, writing, overall)
+function autoAwards() {
+  const metric = { looks: (it) => (it.sub || [])[0] || 0, story: (it) => (it.sub || [])[1] || 0, personality: (it) => (it.sub || [])[2] || 0, voice: (it) => (it.sub || [])[3] || 0, rating: (it) => it.rating || 0 };
+  let filled = 0;
+  for (const c of state.awards.cats) {
+    const f = metric[c.auto]; if (!f) continue;
+    const ranked = state.order.filter((k) => visible(k) && f(state.items[k]) > 0)
+      .sort((a, b) => f(state.items[b]) - f(state.items[a]) || (state.items[b].rating || 0) - (state.items[a].rating || 0));
+    if (!ranked.length) continue;
+    c.slots = [ranked[0] || null, ranked[1] || null, ranked[2] || null]; filled++;
+  }
+  return filled;
+}
+
 // ---------- double-click a card to pick where it goes ----------
 let lastClick = { key: "", t: 0 };
 function closeCardMenu() { $("#cardMenu")?.remove(); }
@@ -859,6 +992,10 @@ function openCardMenu(key, x, y) {
   if (state.mode === "tier") {
     const cur = state.tiers.find((t) => t.keys.includes(key));
     state.tiers.forEach((t) => opts.push({ html: `<i style="background:${esc(t.color)}"></i>${esc(t.name)}${cur === t ? " ✓" : ""}`, run: () => moveKey(key, t.id) }));
+  } else if (state.mode === "awards") {
+    if (!state.awards.cats.length) opts.push({ html: "<i>Add some awards first</i>", run: () => {} });
+    state.awards.cats.forEach((c) => opts.push({ row: true, label: c.title || "Untitled",
+      runs: [0, 1, 2].map((i) => ({ txt: ["1st", "2nd", "3rd"][i], on: c.slots[i] === key, run: () => moveKey(key, "award", null, c.id + ":" + i) })) }));
   } else if (state.mode === "venn") {
     const v = state.venn, g = vennGeom(v), cur = Object.entries(v.regions).find(([, a]) => a.includes(key))?.[0];
     Object.keys(g.regions).sort((a, b) => a.length - b.length || a.localeCompare(b)).forEach((k) => {
@@ -872,15 +1009,16 @@ function openCardMenu(key, x, y) {
       .forEach(([n, lab, px, py]) => opts.push({ html: `${esc(n)}${lab ? ` <small>${esc(lab)}</small>` : ""}`, run: () => moveKey(key, "axis", null, { x: px + j(), y: py + j() }) }));
   }
   opts.push({ sep: true });
-  if (placed().has(key)) opts.push({ html: "↩ Back to the pool", run: () => moveKey(key, "") });
-  opts.push({ html: isHeroine(it) ? "♀ Unmark as heroine" : "♀ Mark as heroine", run: () => { it.heroine = !isHeroine(it); save(); render(); } });
-  opts.push({ html: "✕ Remove character", danger: true, run: () => removeItem(key) });
+  if (state.mode === "awards" ? awardKeys().has(key) : placed().has(key)) opts.push({ html: state.mode === "awards" ? "↩ Take off every podium" : "↩ Back to the pool", run: () => {
+    if (state.mode === "awards") { state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s)))); save(); render(); } else moveKey(key, ""); } });
+  if (it.kind !== "game") opts.push({ html: isHeroine(it) ? "♀ Unmark as heroine" : "♀ Mark as heroine", run: () => { it.heroine = !isHeroine(it); save(); render(); } });
+  opts.push({ html: it.kind === "game" ? "✕ Remove game" : "✕ Remove character", danger: true, run: () => removeItem(key) });
   const m = document.createElement("div"); m.id = "cardMenu"; m.className = "card-menu";
-  m.innerHTML = `<div class="cm-h">Move <b>${esc(it.label)}</b> to…</div>` + opts.map((o, i) => (o.sep ? `<hr>` : `<button data-i="${i}"${o.danger ? ' class="danger"' : ""}>${o.html}</button>`)).join("");
+  m.innerHTML = `<div class="cm-h">Move <b>${esc(it.label)}</b> to…</div>` + opts.map((o, i) => (o.sep ? `<hr>` : o.row ? `<div class="cm-row"><span>${esc(o.label)}</span>${o.runs.map((r, j) => `<button data-i="${i}" data-r="${j}"${r.on ? ' class="on"' : ""}>${r.txt}</button>`).join("")}</div>` : `<button data-i="${i}"${o.danger ? ' class="danger"' : ""}>${o.html}</button>`)).join("");
   document.body.appendChild(m);
   m.style.left = Math.max(8, Math.min(x, innerWidth - m.offsetWidth - 8)) + "px";
   m.style.top = Math.max(8, Math.min(y, innerHeight - m.offsetHeight - 8)) + "px";
-  m.onclick = (e) => { const b = e.target.closest("[data-i]"); if (b) { closeCardMenu(); opts[+b.dataset.i].run(); } };
+  m.onclick = (e) => { const b = e.target.closest("[data-i]"); if (b) { closeCardMenu(); const o = opts[+b.dataset.i]; (b.dataset.r !== undefined ? o.runs[+b.dataset.r] : o).run(); } };
 }
 document.addEventListener("mousedown", (e) => { if (!e.target.closest?.("#cardMenu")) closeCardMenu(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCardMenu(); });
