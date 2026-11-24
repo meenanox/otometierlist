@@ -251,3 +251,5 @@ body.kind-games .pempty{aspect-ratio:1/1.42}
 .pl-step i:nth-child(1){height:20px}.pl-step i:nth-child(2){height:30px}.pl-step i:nth-child(3){height:12px}
 .pl-square{align-items:center}.pl-square i{height:15px;border-radius:4px}
 .pl-none{align-items:center}.pl-none i{height:15px;border-radius:50%;background:none;border:3px solid #d9ad45}
+
+.pool-more{flex:1 0 100%;margin:4px 0}

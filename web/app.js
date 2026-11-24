@@ -44,7 +44,15 @@ const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(T
 let selected = null;
 
 // ---------- persistence ----------
-function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* storage full or blocked: ignore */ } }
+// The saved list can be a megabyte, so a burst of changes (an import adds a game at a time) is written once.
+let saveTimer = 0, saveDirty = false;
+function saveNow() { clearTimeout(saveTimer); if (!saveDirty) return; saveDirty = false; try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* storage full or blocked: ignore */ } }
+function save() { saveDirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 300); }
+addEventListener("pagehide", saveNow); addEventListener("beforeunload", saveNow);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
+// ...and a burst of redraws is drawn once per frame
+let renderRaf = 0;
+function renderSoon() { if (!renderRaf) renderRaf = requestAnimationFrame(() => { renderRaf = 0; render(); }); }
 function load(doc) {
   if (!doc || !Array.isArray(doc.tiers)) return false;
   state.name = doc.name || state.name;
@@ -138,7 +146,7 @@ function cardHtml(key, idx) {
   const it = state.items[key]; if (!it) return "";
   const tip = [it.label, it.alt && it.alt !== it.label ? it.alt : "", it.game, it.rating ? `your rating ${it.rating}/5` : ""].filter(Boolean).join(" · ");
   return `<figure class="card${selected === key ? " sel" : ""}" draggable="true" data-key="${esc(key)}" title="${esc(tip)}">
-    ${it.img ? `<img loading="lazy" src="${esc(imgSrc(it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}
+    ${it.img ? `<img loading="lazy" decoding="async" src="${esc(imgSrc(it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}
     ${idx != null ? `<span class="num">${idx + 1}</span>` : ""}${isHeroine(it) ? `<span class="hbadge" title="Heroine">♀</span>` : ""}<figcaption>${esc(it.label)}</figcaption></figure>`;
 }
 
@@ -212,7 +220,7 @@ function render() {
   if (renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderAxisBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
   $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode];
-  $("#awardsBar").hidden = state.mode !== "awards"; $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar();
+  $("#awardsBar").hidden = state.mode !== "awards"; if (state.mode === "awards") { $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar(); }
   if (state.mode === "awards") { $("#board").innerHTML = awardsBoardHtml(); if (state.awards.scope && !castInfo[state.awards.scope]) loadCast(state.awards.scope); }
   else if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
   else if (venn) $("#board").innerHTML = vennBoardHtml();
@@ -221,6 +229,29 @@ function render() {
       <div class="tier-label" data-rename="${t.id}" style="background:${esc(t.color)};color:${inkFor(t.color)}" title="Double-click to rename"><span>${esc(t.name)}</span></div>
       <div class="tier-cards" data-tier="${t.id}">${t.keys.filter(visible).map((k, i) => cardHtml(k, state.ui.numbered ? i : null)).join("")}</div>
     </div>`).join("");
+  renderPool();
+  if (document.activeElement !== $("#listName")) $("#listName").value = state.name;
+}
+
+// The pool can hold thousands of characters. Only the first page is drawn; more are added as you scroll to the end.
+const POOL_PAGE = 120;
+let poolKeys = [], poolShown = 0, poolSig = "", poolObserver = null;
+const poolChunk = (from, to) => { let h = ""; for (let i = from; i < to; i++) h += cardHtml(poolKeys[i]); return h; };
+const poolMoreHtml = () => (poolShown < poolKeys.length ? `<button type="button" class="ghost pool-more" id="poolMore">Show ${Math.min(POOL_PAGE, poolKeys.length - poolShown)} more (${poolKeys.length - poolShown} left)</button>` : "");
+function watchPoolEnd() {
+  if (poolObserver) { poolObserver.disconnect(); poolObserver = null; }
+  const el = $("#poolMore"); if (!el || !("IntersectionObserver" in window)) return;
+  poolObserver = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) loadMorePool(); }, { root: $("#pool"), rootMargin: "500px" });
+  poolObserver.observe(el);
+}
+function loadMorePool() {
+  const el = $("#poolMore"); if (!el) return;
+  const to = Math.min(poolKeys.length, poolShown + POOL_PAGE), from = poolShown; el.remove(); poolShown = to;
+  $("#pool").insertAdjacentHTML("beforeend", poolChunk(from, to) + poolMoreHtml()); watchPoolEnd();
+}
+$("#pool").addEventListener("click", (e) => { const m = e.target.closest("#poolMore"); if (m) { e.stopPropagation(); loadMorePool(); } });
+
+function renderPool() {
   const inBoard = placed();
   const q = $("#poolSearch").value.trim().toLowerCase();
   let keys = state.order.filter((k) => !inBoard.has(k) && visible(k) && inScope(k));
@@ -231,23 +262,31 @@ function render() {
   else if (sort === "game") keys.sort((a, b) => (state.items[a].game || "").localeCompare(state.items[b].game || "") || state.items[a].label.localeCompare(state.items[b].label));
   else if (sort === "rating") keys.sort((a, b) => (state.items[b].rating || 0) - (state.items[a].rating || 0));
   // how many are flagged, so the filter never fails silently
-  const allKeys = state.order.filter((k) => state.items[k]);
-  const nHero = allKeys.filter((k) => isHeroine(state.items[k])).length, nManual = allKeys.filter((k) => state.items[k].heroine !== undefined).length;
-  const nRoleless = allKeys.filter((k) => !state.items[k].role && !state.items[k].kind).length;
+  const counts = { show: 0, hide: 0, only: 0, li: 0, heroli: 0, side: 0 }; let nManual = 0, nRoleless = 0;
+  for (const k of state.order) {
+    const it = state.items[k]; if (!it) continue; const c = roleClass(it); counts.show++;
+    if (c !== "heroine") counts.hide++;
+    if (c === "heroine") { counts.only++; counts.heroli++; } else if (c === "love") { counts.li++; counts.heroli++; } else if (c === "side") counts.side++;
+    if (it.heroine !== undefined) nManual++;
+    if (!it.role && !it.kind) nRoleless++;
+  }
+  const nHero = counts.only;
   const hiddenByFilter = state.order.filter((k) => !inBoard.has(k) && state.items[k] && !heroOk(state.items[k])).length;
   let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
   if (!all && hiddenByFilter) {
     const mode = state.ui.heroines, byRole = ["only", "li", "heroli", "side"].includes(mode), noHero = mode === "only" && !nHero;
-    empty = `<div class="muted empty"><p>The <b>${HERO_FILTERS[mode] || mode}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${noHero ? " None of your characters are flagged as heroines." : mode === "side" && !allKeys.some((k) => roleClass(state.items[k]) === "side") ? " You haven't imported any side characters yet: set Who to add to Everyone when importing, or use Add side characters on a game's awards page." : byRole && nRoleless ? ` ${nRoleless} of your characters have no role saved yet.` : ""}</p>
+    empty = `<div class="muted empty"><p>The <b>${HERO_FILTERS[mode] || mode}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${noHero ? " None of your characters are flagged as heroines." : mode === "side" && !counts.side ? " You haven't imported any side characters yet: set Who to add to Everyone when importing, or use Add side characters on a game's awards page." : byRole && nRoleless ? ` ${nRoleless} of your characters have no role saved yet.` : ""}</p>
       <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nRoleless ? `<button class="primary" data-hero="detect" title="Looks up each character's role on KoiLog / VNDB">Detect roles (${nRoleless})</button>` : ""}${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
       ${byRole && (noHero || nRoleless) ? `<p>Roles are tagged when you import. Use <b>Detect roles</b> for characters imported earlier, re-import with <b>Who to add</b> set to a choice that includes them, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
   }
-  $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || empty;
+  const sig = [q, sort, state.ui.heroines, state.mode, state.kind, state.awards.scope].join("|");
+  if (sig !== poolSig) { poolSig = sig; poolShown = 0; }   // a new search, sort or filter starts from the top
+  poolKeys = keys; poolShown = Math.min(keys.length, Math.max(POOL_PAGE, poolShown));
+  $("#pool").innerHTML = poolShown ? poolChunk(0, poolShown) + poolMoreHtml() : empty; watchPoolEnd();
   $("#poolCount").textContent = all ? `${all} unranked` : "";
-  if (document.activeElement !== $("#listName")) $("#listName").value = state.name;
   $("#heroFilter").value = state.ui.heroines;
-  for (const sel of [$("#heroFilter"), $("#exHeroes")]) for (const op of sel.options) op.textContent = `${HERO_FILTERS[op.value]} (${allKeys.filter((k) => heroMatch(op.value, state.items[k])).length})`;
-}
+  for (const sel of [$("#heroFilter"), $("#exHeroes")]) for (const op of sel.options) op.textContent = `${HERO_FILTERS[op.value]} (${counts[op.value]})`;}
+
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
 function moveKey(key, dest, beforeKey, at) {
@@ -347,7 +386,7 @@ function addItems(list) {
     const prev = state.items[it.key], gs = new Set([...(prev?.games || (prev?.game ? [prev.game] : [])), ...(it.games || (it.game ? [it.game] : []))]);
     state.items[it.key] = { ...prev, ...it, ...(gs.size ? { games: [...gs] } : {}) };
   }
-  save(); render(); return n;
+  save(); renderSoon(); return n;
 }
 
 // ---------- KoiLog ----------
@@ -769,7 +808,7 @@ $("#vennBar").addEventListener("change", (e) => {
 
 // ---------- toolbar ----------
 $("#listName").oninput = (e) => { state.name = e.target.value; e.target.dataset.touched = "1"; save(); };
-$("#poolSearch").oninput = render; $("#poolSort").onchange = render;
+let poolTimer = 0; $("#poolSearch").oninput = () => { clearTimeout(poolTimer); poolTimer = setTimeout(renderPool, 120); }; $("#poolSort").onchange = renderPool;
 
 function autoRankTiers(rated) {
   const n = state.tiers.length;
