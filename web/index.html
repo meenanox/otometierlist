@@ -49,7 +49,7 @@
     <div class="pool-head">
       <b>Pool</b> <span id="poolCount" class="muted"></span> <button id="btnPoolReset2" class="ghost" title="Remove all unranked characters from the pool">Reset pool</button>
       <input id="poolSearch" type="search" placeholder="Filter by name or game…">
-      <select id="heroFilter" title="Heroines are the player characters. Double-click a card, then choose Mark as heroine to change one."><option value="show">Heroines: show</option><option value="hide">Heroines: hide</option><option value="only">Heroines: only</option></select>
+      <select id="heroFilter" title="Who to show. Heroines are the player characters; double-click a card, then choose Mark as heroine to change one."><option value="show">Show everyone</option><option value="hide">Hide heroines</option><option value="only">Heroines only</option><option value="li">Love interests only</option><option value="heroli">Heroines + love interests</option><option value="side">Side characters only</option></select>
       <select id="poolSort"><option value="added">As imported</option><option value="name">Name</option><option value="game">Game</option><option value="rating">My rating</option></select>
     </div>
     <div id="pool" class="pool" data-tier=""></div>
@@ -169,7 +169,7 @@
       </div>
       <label>Award finish <select id="exFx"><option value="gala">Gala: glow, spotlight, sparkles, crown</option><option value="glow">Glow: metallic with glowing halos</option><option value="metal">Metallic: shiny podium steps</option><option value="flat">Flat: plain colours</option></select></label>
       <button type="button" class="ghost" id="exDesigns" hidden>Crown, button and cover designs…</button>
-      <label>Heroines <select id="exHeroes"><option value="show">Include</option><option value="hide">Leave out</option><option value="only">Only heroines</option></select></label>
+      <label>Characters shown <select id="exHeroes"><option value="show">Show everyone</option><option value="hide">Hide heroines</option><option value="only">Heroines only</option><option value="li">Love interests only</option><option value="heroli">Heroines + love interests</option><option value="side">Side characters only</option></select></label>
       <label class="inline"><input type="checkbox" id="exHide" checked> <span id="exHideT">Hide empty tiers</span></label>
       <label class="inline"><input type="checkbox" id="exPool"> Include unranked characters</label>
       <small id="exInfo" class="muted"></small>

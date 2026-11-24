@@ -100,7 +100,11 @@ function inkFor(hex) {
 const imgSrc = (u) => (u ? `/proxy/img?u=${encodeURIComponent(u)}` : "");
 // Heroine = the player character. KoiLog "protagonist" / VNDB "main". Double-click a card to flip it by hand.
 const isHeroine = (it) => (it.heroine !== undefined ? !!it.heroine : it.role === "heroine");
-const heroOk = (it) => { if (state.kind === "games") return true; const m = state.ui.heroines; return m === "show" || (m === "hide" ? !isHeroine(it) : isHeroine(it)); };
+// who is shown: everyone, or by role (heroine / love interest / side character)
+const HERO_FILTERS = { show: "Show everyone", hide: "Hide heroines", only: "Heroines only", li: "Love interests only", heroli: "Heroines + love interests", side: "Side characters only" };
+const roleClass = (it) => (isHeroine(it) ? "heroine" : it.role === "love" ? "love" : it.role === "side" || it.role === "other" ? "side" : "");
+const heroMatch = (m, it) => { const c = roleClass(it); return m === "hide" ? c !== "heroine" : m === "only" ? c === "heroine" : m === "li" ? c === "love" : m === "heroli" ? c === "heroine" || c === "love" : m === "side" ? c === "side" : true; };
+const heroOk = (it) => state.kind === "games" || heroMatch(state.ui.heroines, it);
 const visible = (k) => !!state.items[k] && heroOk(state.items[k]);
 const roleOf = (r) => ({ protagonist: "heroine", main: "heroine", love_interest: "love", primary: "love", side: "side" }[r] || "other");
 const roleOk = (role, who) => who === "all" || (role === "heroine" && (who === "love+heroine" || who === "heroine")) || (role === "love" && (who === "love" || who === "love+heroine"));
@@ -233,15 +237,16 @@ function render() {
   const hiddenByFilter = state.order.filter((k) => !inBoard.has(k) && state.items[k] && !heroOk(state.items[k])).length;
   let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
   if (!all && hiddenByFilter) {
-    empty = `<div class="muted empty"><p>The <b>Heroines: ${state.ui.heroines}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${state.ui.heroines === "only" && !nHero ? " None of your characters are flagged as heroines." : ""}</p>
-      <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nRoleless ? `<button class="primary" data-hero="detect" title="Looks up each character's role on KoiLog / VNDB">Detect heroines (${nRoleless})</button>` : ""}${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
-      ${state.ui.heroines === "only" && !nHero ? `<p>Heroines are tagged when you import. Use <b>Detect heroines</b> for characters imported earlier, re-import with <b>Who to add</b> set to a choice that includes heroines, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
+    const mode = state.ui.heroines, byRole = ["only", "li", "heroli", "side"].includes(mode), noHero = mode === "only" && !nHero;
+    empty = `<div class="muted empty"><p>The <b>${HERO_FILTERS[mode] || mode}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${noHero ? " None of your characters are flagged as heroines." : mode === "side" && !allKeys.some((k) => roleClass(state.items[k]) === "side") ? " You haven't imported any side characters yet: set Who to add to Everyone when importing, or use Add side characters on a game's awards page." : byRole && nRoleless ? ` ${nRoleless} of your characters have no role saved yet.` : ""}</p>
+      <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nRoleless ? `<button class="primary" data-hero="detect" title="Looks up each character's role on KoiLog / VNDB">Detect roles (${nRoleless})</button>` : ""}${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
+      ${byRole && (noHero || nRoleless) ? `<p>Roles are tagged when you import. Use <b>Detect roles</b> for characters imported earlier, re-import with <b>Who to add</b> set to a choice that includes them, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
   }
   $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || empty;
   $("#poolCount").textContent = all ? `${all} unranked` : "";
   if (document.activeElement !== $("#listName")) $("#listName").value = state.name;
   $("#heroFilter").value = state.ui.heroines;
-  const hf = $("#heroFilter").options; hf[0].textContent = `Heroines: show (${allKeys.length})`; hf[1].textContent = `Heroines: hide (${allKeys.length - nHero})`; hf[2].textContent = `Heroines: only (${nHero})`;
+  for (const sel of [$("#heroFilter"), $("#exHeroes")]) for (const op of sel.options) op.textContent = `${HERO_FILTERS[op.value]} (${allKeys.filter((k) => heroMatch(op.value, state.items[k])).length})`;
 }
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
