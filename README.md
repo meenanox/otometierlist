@@ -20,6 +20,9 @@ Maintainers: run `python make_zip.py` after changing the app and commit the refr
 - **Axis chart:** a cross chart (like an alignment chart). Drag characters anywhere on it. Set the four end labels, grid size (or none), square or wide shape, optional numbered scale, snap-to-grid, axis/grid colours and corner labels. **Auto-plot from ratings** puts personality left to right and looks bottom to top.
 - **Venn diagram:** 2 or 3 circles with your own names and colours. Drop a character where circles overlap to put them in several groups. **Auto-fill from ratings** makes Looks / Personality / Voice circles from your 5★ aspect ratings.
 
+## Heroines
+Heroines (the player character) are tagged on import: KoiLog "protagonist", VNDB "main". Choose **Who to add** in the import box (love interests, love interests + heroines, heroines only, everyone). Then use the **Heroines: show / hide / only** menu above the pool, or the Heroines option when exporting, to filter them in or out. Heroines show a pink ♀ badge; double-click any card to mark or unmark one by hand.
+
 ## Customise
 - **Layout:** pool beside or below the board, drag the divider (or use sliders) for pool width, card size on the board / in the pool / in the Venn, rank label width and text size, show or hide names on cards.
 - **Ranks:** rename on the board (double-click), recolour, reorder, add or remove; four presets, save your own, or paste a list (`Soulmate #e8467c` per line). Optional order numbers on each card.

@@ -269,7 +269,7 @@ async function renderAxisImage(canvas, o) {
   c.restore();
 
   // characters
-  const items = Object.entries(a.pos).filter(([key]) => state.items[key]).map(([key, p]) => ({ key, p, ...state.items[key] }));
+  const items = Object.entries(a.pos).filter(([key]) => visible(key)).map(([key, p]) => ({ key, p, ...state.items[key] }));
   const imgs = new Map();
   for (let i = 0; i < items.length; i += 16) await Promise.all(items.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
   const cw = plotW * (state.ui.axisCard || 7) / 100, ch = cw * 1.25, namesN = +o.names;
@@ -316,7 +316,7 @@ async function renderVennImage(canvas, o) {
   });
 
   // cards: one shared size, as large as every region allows
-  const regs = Object.entries(g.regions).map(([key, r]) => ({ key, r, items: (v.regions[key] || []).map((x) => ({ key: x, ...state.items[x] })).filter((it) => it.label) })).filter((q) => q.items.length);
+  const regs = Object.entries(g.regions).map(([key, r]) => ({ key, r, items: (v.regions[key] || []).map((x) => ({ key: x, ...state.items[x] })).filter((it) => it.label && heroOk(it)) })).filter((q) => q.items.length);
   const all = regs.flatMap((q) => q.items), namesN = +o.names, gap = 6 * k, ratio = 1.25;
   const cellH = (cw) => cw * ratio + (namesN ? Math.max(9 * k, Math.min(24 * k, cw * 0.14)) * 1.3 + 4 * k : 0);
   const cap = Math.max(14 * k, +o.card * k);
@@ -351,8 +351,8 @@ async function renderTierImage(canvas, o) {
   const k = fixed ? Math.min(1.8, Math.max(0.5, Math.min(fw, fh) / 1200)) : Math.min(1.5, Math.max(0.65, W / 1600));
   try { await Promise.all(["600 40px 'Cormorant Garamond'", "700 20px Orbitron", "20px 'Press Start 2P'"].map((f) => document.fonts.load(f))); } catch (e) { /* fall back to system fonts */ }
 
-  const rows = state.tiers.map((t) => ({ name: t.name, color: t.color, items: t.keys.map((x) => ({ key: x, ...state.items[x] })).filter((i) => i.label) }));
-  if (o.pool) { const inT = new Set(state.tiers.flatMap((t) => t.keys)); rows.push({ name: "Unranked", color: "#8a93b3", items: state.order.filter((x) => !inT.has(x) && state.items[x]).map((x) => ({ key: x, ...state.items[x] })) }); }
+  const rows = state.tiers.map((t) => ({ name: t.name, color: t.color, items: t.keys.map((x) => ({ key: x, ...state.items[x] })).filter((i) => i.label && heroOk(i)) }));
+  if (o.pool) { const inT = new Set(state.tiers.flatMap((t) => t.keys)); rows.push({ name: "Unranked", color: "#8a93b3", items: state.order.filter((x) => !inT.has(x) && visible(x)).map((x) => ({ key: x, ...state.items[x] })) }); }
   const shown = rows.filter((r) => r.items.length || !o.hideEmpty);
   const total = shown.reduce((s, r) => s + r.items.length, 0);
 
@@ -478,6 +478,7 @@ function openTierExport() {
     $("#exTitle").value = o.title; $("#exSub").value = o.subtitle; $("#exFoot").value = o.footer; $("#exSize").value = o.size; $("#exCard").value = o.card;
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
+    $("#exHeroes").value = state.ui.heroines;
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier; $("#exPool").closest("label").hidden = noTier;
   };
@@ -492,6 +493,7 @@ function openTierExport() {
   };
   const soon = () => { clearTimeout(timer); timer = setTimeout(draw, 250); };
   dlg.oninput = dlg.onchange = () => {
+    if ($("#exHeroes").value !== state.ui.heroines) { state.ui.heroines = $("#exHeroes").value; save(); render(); }
     Object.assign(o, { title: $("#exTitle").value, subtitle: $("#exSub").value, footer: $("#exFoot").value, size: $("#exSize").value, card: $("#exCard").value,
       scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked,
       titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value });

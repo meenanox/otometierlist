@@ -17,7 +17,7 @@ let uid = 0;
 const newId = () => "t" + Date.now().toString(36) + (uid++).toString(36);
 const makeTiers = (preset) => preset.map(([name, color]) => ({ id: newId(), name, color, keys: [] }));
 
-const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false };
+const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false, heroines: "show" };
 const VENN_COLORS = ["#e8467c", "#3aa0e0", "#f2b94b"];
 const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
@@ -61,6 +61,12 @@ function inkFor(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? "#1a1a1a" : "#ffffff";
 }
 const imgSrc = (u) => (u ? `/proxy/img?u=${encodeURIComponent(u)}` : "");
+// Heroine = the player character. KoiLog "protagonist" / VNDB "main". Double-click a card to flip it by hand.
+const isHeroine = (it) => (it.heroine !== undefined ? !!it.heroine : it.role === "heroine");
+const heroOk = (it) => { const m = state.ui.heroines; return m === "show" || (m === "hide" ? !isHeroine(it) : isHeroine(it)); };
+const visible = (k) => !!state.items[k] && heroOk(state.items[k]);
+const roleOf = (r) => ({ protagonist: "heroine", main: "heroine", love_interest: "love", primary: "love", side: "side" }[r] || "other");
+const roleOk = (role, who) => who === "all" || (role === "heroine" && (who === "love+heroine" || who === "heroine")) || (role === "love" && (who === "love" || who === "love+heroine"));
 const placed = () => new Set(state.mode === "venn" ? Object.values(state.venn.regions).flat() : state.mode === "axis" ? Object.keys(state.axis.pos) : state.tiers.flatMap((t) => t.keys));
 
 async function mapPool(list, n, fn) {
@@ -88,7 +94,7 @@ function cardHtml(key, idx) {
   const tip = [it.label, it.alt && it.alt !== it.label ? it.alt : "", it.game, it.rating ? `your rating ${it.rating}/5` : ""].filter(Boolean).join(" · ");
   return `<figure class="card${selected === key ? " sel" : ""}" draggable="true" data-key="${esc(key)}" title="${esc(tip)}">
     ${it.img ? `<img loading="lazy" src="${esc(imgSrc(it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}
-    ${idx != null ? `<span class="num">${idx + 1}</span>` : ""}<figcaption>${esc(it.label)}</figcaption></figure>`;
+    ${idx != null ? `<span class="num">${idx + 1}</span>` : ""}${isHeroine(it) ? `<span class="hbadge" title="Heroine">♀</span>` : ""}<figcaption>${esc(it.label)}</figcaption></figure>`;
 }
 
 // Venn geometry in a 100-wide space (height varies). Also used by export.js.
@@ -139,7 +145,7 @@ function vennBoardHtml() {
   const circ = g.circles.map((c, i) => `<div class="vcircle" style="left:${px(c.cx - c.r)};top:${py(c.cy - c.r)};width:${px(c.r * 2)};height:${py(c.r * 2)};background:${esc(v.circles[i].color)}33;border-color:${esc(v.circles[i].color)}"></div>`).join("");
   const labs = g.labels.map((l, i) => `<div class="vlabel" style="left:${px(l.x)};top:${py(l.y)};transform:translate(${-50 + l.ax * 50}%,${-50 + l.ay * 50}%);color:${esc(v.circles[i].color)}">${esc(v.circles[i].name)}</div>`).join("");
   const regs = Object.entries(g.regions).map(([k, r]) => {
-    const keys = (v.regions[k] || []).filter((x) => state.items[x]);
+    const keys = (v.regions[k] || []).filter(visible);
     const ppu = ($("#board").clientWidth || 900) / 100;
     const cw = keys.length ? fitCard(keys.length, r.w * 0.92 * ppu, r.h * 0.86 * ppu, state.ui.vennCard, 16) : state.ui.vennCard;
     return `<div class="vregion" data-region="${k}" style="left:${px(r.cx)};top:${py(r.cy)};width:${px(r.w * 0.92)};--venn-card:${cw}px">${keys.map((x) => cardHtml(x)).join("")}</div>`;
@@ -166,11 +172,11 @@ function render() {
   else $("#board").innerHTML = state.tiers.map((t) => `
     <div class="tier" data-tier="${t.id}">
       <div class="tier-label" data-rename="${t.id}" style="background:${esc(t.color)};color:${inkFor(t.color)}" title="Double-click to rename"><span>${esc(t.name)}</span></div>
-      <div class="tier-cards" data-tier="${t.id}">${t.keys.map((k, i) => cardHtml(k, state.ui.numbered ? i : null)).join("")}</div>
+      <div class="tier-cards" data-tier="${t.id}">${t.keys.filter(visible).map((k, i) => cardHtml(k, state.ui.numbered ? i : null)).join("")}</div>
     </div>`).join("");
   const inBoard = placed();
   const q = $("#poolSearch").value.trim().toLowerCase();
-  let keys = state.order.filter((k) => !inBoard.has(k) && state.items[k]);
+  let keys = state.order.filter((k) => !inBoard.has(k) && visible(k));
   const all = keys.length;
   if (q) keys = keys.filter((k) => `${state.items[k].label} ${state.items[k].alt || ""} ${state.items[k].game || ""}`.toLowerCase().includes(q));
   const sort = $("#poolSort").value;
@@ -180,6 +186,7 @@ function render() {
   $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
   $("#poolCount").textContent = all ? `${all} unranked` : "";
   if (document.activeElement !== $("#listName")) $("#listName").value = state.name;
+  $("#heroFilter").value = state.ui.heroines;
 }
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
@@ -282,11 +289,11 @@ const origName = (names) => (names || []).find((n) => n.isOriginal)?.value || (n
 const gameTitle = (g) => (g.titles || []).find((t) => t.default)?.value || (g.titles || [])[0]?.value || "";
 
 function klCharItem(c, game, extra = {}) {
-  return { key: "kl:" + c.id, label: pickName(c.names), alt: origName(c.names), game: gameTitle(game),
+  return { key: "kl:" + c.id, role: roleOf(c.role), label: pickName(c.names), alt: origName(c.names), game: gameTitle(game),
     img: c.avatarUrls?.thumbnail || "", imgHi: c.avatarUrls?.original || "", ...extra };
 }
 
-async function importKoilogUser(input, onlyPlayed, withRatings, progress) {
+async function importKoilogUser(input, onlyPlayed, withRatings, who, progress) {
   const name = input.trim().replace(/^.*\/u\//, "").replace(/[/?#].*$/, "");
   if (!name) throw new Error("Enter a username");
   progress(0, "Looking up profile…");
@@ -310,12 +317,17 @@ async function importKoilogUser(input, onlyPlayed, withRatings, progress) {
     try {
       const [game, chars] = await Promise.all([kl("games/" + g.id), kl(`games/${g.id}/characters`)]);
       const byId = Object.fromEntries(chars.map((c) => [c.id, c]));
-      const items = [];
-      for (const rs of g.routeStatuses || []) {
-        const c = byId[rs.characterId]; if (!c || !wanted(rs)) continue;
-        const rt = ratings[c.id];
-        items.push(klCharItem(c, game, { status: rs.routeStatus, rating: rt?.overall || 0,
+      const items = [], seen = new Set();
+      for (const rs of g.routeStatuses || []) {   // love interests: only routes you've started (if ticked)
+        const c = byId[rs.characterId]; if (!c || !wanted(rs) || !roleOk("love", who)) continue;
+        const rt = ratings[c.id]; seen.add(c.id);
+        items.push(klCharItem(c, game, { role: "love", status: rs.routeStatus, rating: rt?.overall || 0,
           sub: rt ? [rt.appearance || 0, rt.storyline || 0, rt.personality || 0, rt.voiceActing || 0] : [] }));
+      }
+      for (const c of chars) {                    // heroines and everyone else, by role
+        const role = roleOf(c.role); if (seen.has(c.id) || role === "love" || !roleOk(role, who)) continue;
+        const rt = ratings[c.id];
+        items.push(klCharItem(c, game, { rating: rt?.overall || 0, sub: rt ? [rt.appearance || 0, rt.storyline || 0, rt.personality || 0, rt.voiceActing || 0] : [] }));
       }
       added += addItems(items);
     } catch (e) { /* skip a game that fails */ }
@@ -341,7 +353,7 @@ async function vndbAll(endpoint, body) {
 }
 const vndbImg = (c) => c.image?.url || "";
 
-async function vndbCharactersFor(vnIds, mainOnly, progress) {
+async function vndbCharactersFor(vnIds, who, progress) {
   const titles = {};
   for (let i = 0; i < vnIds.length; i += 50) {
     const part = vnIds.slice(i, i + 50);
@@ -354,16 +366,16 @@ async function vndbCharactersFor(vnIds, mainOnly, progress) {
     const chars = await vndbAll("character", { filters: ["or", ...part.map((id) => ["vn", "=", ["id", "=", id]])], fields: "id,name,original,image.url,vns.id,vns.role" });
     const items = [];
     for (const c of chars) {
-      const link = (c.vns || []).find((v) => part.includes(v.id) && (!mainOnly || v.role === "main" || v.role === "primary"));
+      const link = (c.vns || []).find((v) => part.includes(v.id) && roleOk(roleOf(v.role), who));
       if (!link) continue;
-      items.push({ key: "vn:" + c.id, label: c.name, alt: c.original || "", game: titles[link.id] || link.id, img: vndbImg(c), imgHi: vndbImg(c) });
+      items.push({ key: "vn:" + c.id, role: roleOf(link.role), label: c.name, alt: c.original || "", game: titles[link.id] || link.id, img: vndbImg(c), imgHi: vndbImg(c) });
     }
     added += addItems(items);
   }
   return added;
 }
 
-async function importVndb(input, mainOnly, progress) {
+async function importVndb(input, who, progress) {
   let ids = (input.match(/\bv\d+\b/gi) || []).map((s) => s.toLowerCase());
   if (!ids.length) {
     const name = input.trim(); if (!name) throw new Error("Enter VN ids or a username");
@@ -376,7 +388,7 @@ async function importVndb(input, mainOnly, progress) {
     ids = list.map((x) => x.id);
     if (!ids.length) throw new Error("That list has no Playing / Finished / Stalled / Dropped games (or it's private)");
   }
-  return { added: await vndbCharactersFor([...new Set(ids)], mainOnly, progress), games: ids.length };
+  return { added: await vndbCharactersFor([...new Set(ids)], who, progress), games: ids.length };
 }
 
 // ---------- name search ----------
@@ -420,9 +432,9 @@ $$(".tabs [data-tab]").forEach((b) => (b.onclick = () => {
   $$(".tabs [data-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
 }));
-$("#klGo").onclick = (e) => runImport(e.target, () => importKoilogUser($("#klUser").value, $("#klPlayed").checked, $("#klRank").checked, setStatus));
+$("#klGo").onclick = (e) => runImport(e.target, () => importKoilogUser($("#klUser").value, $("#klPlayed").checked, $("#klRank").checked, $("#impWho").value, setStatus));
 $("#klUser").onkeydown = (e) => e.key === "Enter" && $("#klGo").click();
-$("#vnGo").onclick = (e) => runImport(e.target, () => importVndb($("#vnIn").value, $("#vnMain").checked, setStatus));
+$("#vnGo").onclick = (e) => runImport(e.target, () => importVndb($("#vnIn").value, $("#impWho").value, setStatus));
 $("#vnIn").onkeydown = (e) => e.key === "Enter" && $("#vnGo").click();
 $("#nmGo").onclick = async () => {
   const q = $("#nmIn").value.trim(); if (q.length < 2) return;
@@ -435,10 +447,10 @@ $("#nmGo").onclick = async () => {
     const b = e.target.closest("[data-res]"); if (!b) return;
     const a = rows[+b.dataset.res].act;
     runImport(b, async () => {
-      if (a.type === "vnchar") { const c = a.c; return { added: addItems([{ key: "vn:" + c.id, label: c.name, alt: c.original || "", game: c.vns?.[0]?.title || "", img: vndbImg(c), imgHi: vndbImg(c) }]), games: 1 }; }
-      if (a.type === "vn") return { added: await vndbCharactersFor([a.id], false, setStatus), games: 1 };
+      if (a.type === "vnchar") { const c = a.c; return { added: addItems([{ key: "vn:" + c.id, role: roleOf(c.vns?.[0]?.role), label: c.name, alt: c.original || "", game: c.vns?.[0]?.title || "", img: vndbImg(c), imgHi: vndbImg(c) }]), games: 1 }; }
+      if (a.type === "vn") return { added: await vndbCharactersFor([a.id], $("#impWho").value, setStatus), games: 1 };
       const chars = await kl(`games/${a.game.id}/characters`);
-      return { added: addItems(chars.map((c) => klCharItem(c, a.game))), games: 1 };
+      return { added: addItems(chars.filter((c) => roleOk(roleOf(c.role), $("#impWho").value)).map((c) => klCharItem(c, a.game))), games: 1 };
     });
   };
 };
@@ -540,7 +552,7 @@ function axisBoardHtml() {
     return `<span class="tk tx" style="left:${p}">${fmtTick(vx)}</span>${i * 2 === N ? "" : `<span class="tk ty" style="top:${p}">${fmtTick(vy)}</span>`}`;
   }).join("") : "";
   const quad = ["tl", "tr", "bl", "br"].map((c, i) => (a.quad[i] ? `<span class="aq aq-${c}">${esc(a.quad[i])}</span>` : "")).join("");
-  const cards = Object.entries(a.pos).filter(([k]) => state.items[k]).map(([k, p]) =>
+  const cards = Object.entries(a.pos).filter(([k]) => visible(k)).map(([k, p]) =>
     `<div class="apos" style="left:${(p.x * 100).toFixed(2)}%;top:${(p.y * 100).toFixed(2)}%">${cardHtml(k)}</div>`).join("");
   const ax = a.axisColor ? `;--ac:${esc(a.axisColor)}` : "", gc = a.gridColor ? `;--gc:${esc(a.gridColor)}` : "";
   return `<div class="axis-outer" style="${ax}${gc}">
@@ -680,6 +692,13 @@ $("#fileIn").onchange = async (e) => {
   e.target.value = "";
 };
 $("#btnExport").onclick = () => openTierExport();
+$("#heroFilter").onchange = (e) => { state.ui.heroines = e.target.value; save(); render(); };
+// double-click a card to mark / unmark it as a heroine by hand
+document.addEventListener("dblclick", (e) => {
+  const c = e.target.closest?.(".card"); if (!c) return;
+  const it = state.items[c.dataset.key]; if (!it) return;
+  it.heroine = !isHeroine(it); selected = null; save(); render(); toast(it.heroine ? `${it.label} marked as a heroine` : `${it.label} is no longer marked as a heroine`);
+});
 let resizeT; addEventListener("resize", () => { if (state.mode !== "venn") return; clearTimeout(resizeT); resizeT = setTimeout(render, 200); });
 
 render();

@@ -128,3 +128,7 @@ body.is-venn .tier-label{display:none}
 
 .export-opts label.rng{display:grid;grid-template-columns:1fr 130px 44px;align-items:center;gap:8px;font-size:12px}
 .export-opts label.rng output{text-align:right;color:var(--muted)}
+
+.hbadge{position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:#e8467c;color:#fff;font:700 11px/17px sans-serif;text-align:center}
+label.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)}
+.pool-head select{max-width:100%}

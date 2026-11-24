@@ -38,6 +38,7 @@
     <div class="pool-head">
       <b>Pool</b> <span id="poolCount" class="muted"></span> <button id="btnPoolReset2" class="ghost" title="Remove all unranked characters from the pool">Reset pool</button>
       <input id="poolSearch" type="search" placeholder="Filter by name or game…">
+      <select id="heroFilter" title="Heroines are the player characters. Double-click a card to mark or unmark one."><option value="show">Heroines: show</option><option value="hide">Heroines: hide</option><option value="only">Heroines: only</option></select>
       <select id="poolSort"><option value="added">As imported</option><option value="name">Name</option><option value="game">Game</option><option value="rating">My rating</option></select>
     </div>
     <div id="pool" class="pool" data-tier=""></div>
@@ -62,12 +63,16 @@
     <div data-pane="vndb" hidden>
       <p class="muted">Paste VN ids (<code>v17, v2002</code>), or a VNDB username / user id (<code>u1234</code>) to use their list.</p>
       <div class="row"><input id="vnIn" placeholder="v17, v2002   or   username / u1234"><button id="vnGo" class="primary">Import</button></div>
-      <label class="inline"><input type="checkbox" id="vnMain" checked> Only main &amp; primary characters</label>
     </div>
     <div data-pane="name" hidden>
       <div class="row"><input id="nmIn" placeholder="game or character name"><button id="nmGo" class="primary">Search</button></div>
       <div id="nmRes" class="results"></div>
     </div>
+    <label class="who">Who to add <select id="impWho">
+      <option value="love+heroine" selected>Love interests + heroines</option>
+      <option value="love">Love interests only</option>
+      <option value="heroine">Heroines only</option>
+      <option value="all">Everyone (incl. side characters)</option></select></label>
     <div id="impStatus" class="status" hidden><div class="bar"><i id="impBar"></i></div><span id="impMsg"></span></div>
   </div>
 </dialog>
@@ -124,6 +129,7 @@
         <label>Format <select id="exFmt"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option></select></label>
         <label>Names <select id="exNames"><option value="0">None</option><option value="1">Name only</option><option value="2">Name + game</option></select></label>
       </div>
+      <label>Heroines <select id="exHeroes"><option value="show">Include</option><option value="hide">Leave out</option><option value="only">Only heroines</option></select></label>
       <label class="inline"><input type="checkbox" id="exHide" checked> Hide empty tiers</label>
       <label class="inline"><input type="checkbox" id="exPool"> Include unranked characters</label>
       <small id="exInfo" class="muted"></small>
