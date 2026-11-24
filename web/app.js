@@ -25,7 +25,12 @@ const makeAxis = () => ({ xMin: "Hate", xMax: "Love", yMin: "Villain", yMax: "He
   snap: false, axisColor: "", gridColor: "", quad: ["", "", "", ""], pos: {} });
 const makeAwards = () => ({ cols: 0, cats: [], scope: "", byGame: {} });
 const awardSets = () => [state.awards, ...Object.values(state.awards.byGame || {})];                 // every set of awards (all games)
-const curAwards = () => (state.awards.scope ? (state.awards.byGame[state.awards.scope] ||= { cols: 0, cats: [] }) : state.awards);   // the set being edited
+const curAwards = () => (state.awards.scope ? ((state.awards.byGame ||= {})[state.awards.scope] ||= { cols: 0, cats: [] }) : state.awards);
+// saved lists from older versions have awards without the per-game parts: fill in what is missing
+function fixAwards(a) {
+  a = a && typeof a === "object" ? a : {};
+  return { ...a, cols: +a.cols || 0, cats: Array.isArray(a.cats) ? a.cats : [], scope: typeof a.scope === "string" ? a.scope : "", last: typeof a.last === "string" ? a.last : "", byGame: a.byGame && typeof a.byGame === "object" ? a.byGame : {} };
+}   // the set being edited
 const gamesOf = (it) => it?.games || (it?.game ? [it.game] : []);
 const inScope = (k) => state.mode !== "awards" || !state.awards.scope || gamesOf(state.items[k]).includes(state.awards.scope);
 function cleanAwardSet(aw) {
@@ -63,6 +68,8 @@ function load(doc) {
     byGame: Object.fromEntries(Object.entries(aw.byGame && typeof aw.byGame === "object" ? aw.byGame : {}).slice(0, 600).map(([g, v]) => [g.slice(0, 200), cleanAwardSet(v)])) };
   state.kind = doc.kind === "games" ? "games" : "characters";
   const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
+  if (state.other) state.other.awards = fixAwards(state.other.awards);
+  if (state.kind === "games") state.awards.scope = "";
   return true;
 }
 try { load(JSON.parse(localStorage.getItem(STORE))); } catch (e) { /* first run */ }
@@ -73,7 +80,8 @@ const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "M
 function switchKind(kind) {
   if (kind === state.kind) return;
   const snap = Object.fromEntries(LIST_KEYS.map((k) => [k, state[k]]));
-  const next = state.other || freshList(kind); next.awards ||= makeAwards();
+  const next = state.other || freshList(kind); next.awards = fixAwards(next.awards); if (kind === "games") next.awards.scope = "";   // per-game awards are for characters
+  scopeSigReset();
   LIST_KEYS.forEach((k) => (state[k] = next[k]));
   state.other = snap; state.kind = kind; selected = null; save(); renderVennBar.lastMode = null;
   render(); syncImportTabs();
@@ -201,7 +209,7 @@ function render() {
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
   $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode];
   $("#awardsBar").hidden = state.mode !== "awards"; $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar();
-  if (state.mode === "awards") $("#board").innerHTML = awardsBoardHtml();
+  if (state.mode === "awards") { $("#board").innerHTML = awardsBoardHtml(); if (state.awards.scope && !castInfo[state.awards.scope]) loadCast(state.awards.scope); }
   else if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
   else if (venn) $("#board").innerHTML = vennBoardHtml();
   else $("#board").innerHTML = state.tiers.map((t) => `
@@ -791,6 +799,7 @@ $("#btnReset").onclick = () => {
 };
 // Reset character pool: removes the unranked characters shown in the pool; anything already on the board stays.
 function resetPool() {
+  if (state.mode === "awards") return toast("Reset pool is off in Awards: everyone stays in the pool so they can win several awards. Use More → Clear everything to start over.", "error");
   const here = state.mode === "awards" ? awardKeys() : placed(), keys = state.order.filter((k) => state.items[k] && !here.has(k));
   if (!keys.length) return toast("The pool is already empty");
   const elsewhere = new Set([...state.tiers.flatMap((t) => t.keys), ...Object.values(state.venn.regions).flat(), ...Object.keys(state.axis.pos), ...awardKeys()]);
@@ -929,9 +938,57 @@ function awardsBoardHtml() {
   const g = state.awards.scope, grid = awardsGridHtml();
   if (!g) return grid;
   const cv = curAwards().cover;
-  return `<div class="game-awards"><h2 class="gtitle">${esc(g.toUpperCase())} AWARDS</h2>
+  return `<div class="game-awards"><h2 class="gtitle">${esc(g.toUpperCase())} AWARDS</h2>${castBannerHtml(g)}
     <div class="gbody"><aside class="gcover">${cv ? `<img src="${esc(imgSrc(cv.img))}" alt="Cover of ${esc(g)}">` : `<div class="gcover-ph">Looking for the cover…</div>`}</aside>${grid}</div></div>`;
 }
+
+// ---- a game's full cast: KoiLog knows who is in the game, whatever you imported before
+const castInfo = {};   // game title -> { gid, game, chars } | { loading } | { error }
+async function loadCast(g) {
+  if (!g || castInfo[g]?.loading) return;
+  castInfo[g] = { loading: true };
+  const set = curAwards();
+  try {
+    let gid = set.gid || state.order.map((k) => state.items[k]).find((i) => i && i.game === g && i.gid)?.gid, game = null;
+    if (!gid) {
+      const r = await kl(`games?searchQuery=${encodeURIComponent(g)}&pageSize=10`);
+      game = (r.data || []).find((x) => (x.titles || []).some((t) => sameTitle(t.value, g)));
+      gid = game?.id;
+    }
+    if (!gid) { castInfo[g] = { error: "not on KoiLog" }; if (state.awards.scope === g) render(); return; }
+    game = game && game.titles ? game : await kl("games/" + gid);
+    const chars = await kl(`games/${gid}/characters`);
+    castInfo[g] = { gid, game, chars }; set.gid = gid;
+    if (!set.cover?.img && game.coverImageUrls?.thumbnail) set.cover = { img: game.coverImageUrls.thumbnail, imgHi: game.coverImageUrls.original || game.coverImageUrls.thumbnail };
+    save();
+  } catch (e) { castInfo[g] = { error: e.message }; }
+  if (state.awards.scope === g) render();
+}
+const inCastList = (c, g) => { const it = state.items["kl:" + c.id]; return !!it && gamesOf(it).includes(g); };
+const isCore = (c) => c.role === "protagonist" || c.role === "love_interest";
+function castBannerHtml(g) {
+  const ci = castInfo[g];
+  if (!ci || ci.loading) return `<p class="cast-note muted">Checking this game's cast…</p>`;
+  if (ci.error) return `<p class="cast-note muted">Couldn't check the full cast (${esc(ci.error)}).</p>`;
+  const core = ci.chars.filter(isCore), have = core.filter((c) => inCastList(c, g)).length;
+  const sideMissing = ci.chars.filter((c) => !isCore(c) && !inCastList(c, g)).length;
+  const buttons = (have < core.length ? `<button class="ghost" data-cast="core">Add the ${core.length - have} missing</button>` : "") +
+    (sideMissing ? `<button class="ghost" data-cast="all">Add ${sideMissing} side character${sideMissing === 1 ? "" : "s"} too</button>` : "");
+  return `<p class="cast-note">${have === core.length ? `<b>Full cast ✓</b> · ${core.length} love interests + heroine are in your list.` : `Cast: <b>${have} of ${core.length}</b> love interests + heroine are in your list.`} ${buttons}</p>`;
+}
+function addCast(g, everyone) {
+  const ci = castInfo[g]; if (!ci?.chars) return;
+  const items = ci.chars.filter((c) => everyone || isCore(c)).map((c) => klCharItem(c, ci.game, { role: roleOf(c.role) }));
+  const before = Object.keys(state.items).length;
+  addItems(items);
+  const added = Object.keys(state.items).length - before;
+  save(); render(); toast(added ? `Added ${added} character${added === 1 ? "" : "s"} to ${g}` : `${g}: everyone was already in your list`);
+}
+$("#board").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-cast]"); if (!b) return;
+  e.stopPropagation(); addCast(state.awards.scope, b.dataset.cast === "all");
+});
+
 // find the game's cover once and remember it: saved game id, then KoiLog by title, then VNDB by title
 async function resolveGameCover(g) {
   const set = curAwards(); if (!g || set.cover?.img) return;
@@ -1020,8 +1077,11 @@ function awardGames() {
   return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 let scopeSig = "";
+function scopeSigReset() { scopeSig = ""; jumpSig = ""; }
 function fillScopeBar() {
-  const row = $("#awScopeRow"); row.hidden = state.kind === "games"; if (row.hidden) return;
+  const row = $("#awScopeRow"), onGames = state.kind === "games"; row.hidden = false;
+  $("#awKind").hidden = onGames; $("#awJump").hidden = !onGames;
+  if (onGames) return fillJumpMenu();   // on the Games side: choose a game, then give awards to its characters
   const inGame = !!state.awards.scope;
   $$("#awKind button").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.k === "game") === inGame)));
   $("#awGamePick").hidden = !inGame;
@@ -1033,10 +1093,32 @@ function fillScopeBar() {
   }
   $("#awScope").value = state.awards.scope;
 }
+// Games side: the characters live in the other list, so choosing a game takes you to them
+let jumpSig = "";
+function otherCharGames() {
+  const o = state.other; if (!o || !o.items) return [];
+  const m = new Map();
+  for (const k of o.order || Object.keys(o.items)) { const it = o.items[k]; if (it && it.kind !== "game") for (const g of gamesOf(it)) m.set(g, (m.get(g) || 0) + 1); }
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+function fillJumpMenu() {
+  const games = otherCharGames(), sel = $("#awJumpSel"), sig = games.map(([g, n]) => g + n).join("|");
+  if (sig !== jumpSig) {
+    jumpSig = sig;
+    sel.innerHTML = games.length ? `<option value="">Choose a game…</option>` + games.map(([g, n]) => `<option value="${esc(g)}">${esc(g)} (${n})</option>`).join("") : `<option value="">No characters imported yet</option>`;
+  }
+  sel.value = "";
+}
+$("#awJumpSel").onchange = (e) => {
+  const g = e.target.value; if (!g) return;
+  switchKind("characters"); state.mode = "awards"; setScope(g);
+  toast(`${g}: awards for its characters (Characters list)`);
+};
 function setScope(g) {
+  if (state.kind === "games") g = "";   // the Games list has no per-game awards
   state.awards.scope = g; if (g) state.awards.last = g;
   if (g && !curAwards().cats.length) { AWARD_PACKS.characters["This game"].forEach((t) => addAward(t)); toast(`Started ${g} awards`); }
-  save(); render(); if (g) resolveGameCover(g);
+  save(); render(); if (g) loadCast(g).then(() => resolveGameCover(g));
 }
 $("#awKind").onclick = (e) => {
   const b = e.target.closest("[data-k]"); if (!b) return;

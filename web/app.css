@@ -204,3 +204,8 @@ body.kind-games .pempty{aspect-ratio:1/1.42}
 .atitle{text-shadow:0 0 14px rgba(226,184,74,.35)}
 @keyframes winnerGlow{0%,100%{box-shadow:0 0 0 2px #e2b84a,0 0 16px 3px rgba(226,184,74,.55)}50%{box-shadow:0 0 0 2px #f2cf6a,0 0 28px 8px rgba(242,207,106,.8)}}
 @media (prefers-reduced-motion:reduce){.pslot.p1 .pcard .card{animation:none}}
+
+.cast-note{margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:13px}
+.cast-note button{padding:3px 10px}
+
+.scope-row[hidden]{display:none}
