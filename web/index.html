@@ -39,6 +39,7 @@
       <span id="awScopeRow" class="scope-row"><span id="awJump" class="scope-row" hidden><label>Give awards to the characters of <select id="awJumpSel"></select></label></span><span class="seg" id="awKind"><button data-k="chars" aria-pressed="true">Character awards</button><button data-k="game" aria-pressed="false">Game awards</button></span><span id="awGamePick" class="scope-row" hidden><button id="awPrev" class="ghost" aria-label="Previous game">◀</button><select id="awScope" aria-label="Game"></select><button id="awNext" class="ghost" aria-label="Next game">▶</button></span></span>
       <input id="awNew" placeholder="Type an award, e.g. Saddest route" maxlength="60" style="width:230px"><button id="awAdd" class="primary">Add</button>
       <button id="awPick" class="ghost">Pick from list…</button>
+      <button id="awDesigns" class="ghost">Designs…</button>
       <select id="awPack" aria-label="Add a pack"></select>
       <label>Columns <select id="awCols"><option value="0">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
       <span class="muted">Drag or double-click characters onto a podium. The same one can win several awards.</span>
@@ -98,6 +99,12 @@
       <option value="all">Everyone (incl. side characters)</option></select></label>
     <div id="impStatus" class="status" hidden><div class="bar"><i id="impBar"></i></div><span id="impMsg"></span></div>
   </div>
+</dialog>
+
+<dialog id="designDlg" class="sheet wide">
+  <header class="sheet-head"><h2>Award designs</h2><button class="icon" data-close aria-label="Close">✕</button></header>
+  <div class="sheet-body" id="designBody"></div>
+  <footer class="sheet-foot"><button class="primary" data-close>Done</button></footer>
 </dialog>
 
 <datalist id="blurbIdeas"><option value="Made me cry"><option value="No notes"><option value="Peak fiction"><option value="I'm not okay"><option value="Still thinking about it"><option value="Fell in love instantly"><option value="Slow burn done right"><option value="Unexpected favourite"><option value="Heartbreaking"><option value="Pure comfort"><option value="Chaotic in the best way"><option value="Underrated gem"><option value="Worth every red flag"><option value="Gorgeous throughout"><option value="Absolute banger"></datalist>
@@ -161,6 +168,7 @@
         <label>Names <select id="exNames"><option value="0">None</option><option value="1">Name only</option><option value="2">Name + game</option></select></label>
       </div>
       <label>Award finish <select id="exFx"><option value="gala">Gala: glow, spotlight, sparkles, crown</option><option value="glow">Glow: metallic with glowing halos</option><option value="metal">Metallic: shiny podium steps</option><option value="flat">Flat: plain colours</option></select></label>
+      <button type="button" class="ghost" id="exDesigns" hidden>Crown, button and cover designs…</button>
       <label>Heroines <select id="exHeroes"><option value="show">Include</option><option value="hide">Leave out</option><option value="only">Only heroines</option></select></label>
       <label class="inline"><input type="checkbox" id="exHide" checked> <span id="exHideT">Hide empty tiers</span></label>
       <label class="inline"><input type="checkbox" id="exPool"> Include unranked characters</label>
@@ -177,6 +185,7 @@
 
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <div id="toast" class="toast" hidden></div>
+<script src="art.js"></script>
 <script src="app.js"></script>
 <script src="export.js"></script>
 </body>

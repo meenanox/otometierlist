@@ -209,3 +209,31 @@ body.kind-games .pempty{aspect-ratio:1/1.42}
 .cast-note button{padding:3px 10px}
 
 .scope-row[hidden]{display:none}
+
+/* ---- award designs ---- */
+.topper{position:absolute;top:-30px;left:50%;transform:translateX(-50%);width:44px;z-index:2;filter:drop-shadow(0 0 7px rgba(255,215,90,.85));pointer-events:none}
+.topper svg{display:block;width:100%;height:auto}
+.pslot.p1 .pcard:has(.card)::before{content:none}
+.pstep svg{display:block;height:min(92%,44px);width:auto;overflow:visible}
+.pstep{font-size:0}
+.gbody[data-side="right"]{grid-template-columns:minmax(0,1fr) minmax(110px,190px)}
+.gbody[data-side="right"] .gcover{order:2}
+.gbody[data-pos="middle"] .gcover{align-self:center;position:static}
+.gbody[data-pos="bottom"] .gcover{align-self:end;position:static}
+@media (max-width:700px){.gbody[data-side="right"]{grid-template-columns:1fr}.gbody[data-side="right"] .gcover{order:0}}
+.design-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:6px}
+.design-grid.btns{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.design-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px}
+.design-tile svg{width:46px;height:46px;display:block}
+.design-tile .trio{display:flex;gap:4px;align-items:center}.design-tile .trio svg{width:36px;height:36px}
+.design-tile .none,.design-tile .plain{font-style:normal;font-size:20px;height:46px;display:grid;place-items:center;color:var(--muted)}
+.design-tile span:last-child{font-size:12px}
+.design-tile[aria-pressed=true],.cover-tile[aria-pressed=true]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+#designBody h3{margin:12px 0 6px;font-size:14px}
+.cover-grid{display:grid;grid-template-columns:repeat(2,minmax(120px,170px));gap:8px}
+.cover-tile{display:flex;align-items:center;gap:10px;padding:6px 10px;text-align:left}
+.cover-tile .mini{position:relative;flex:none;width:44px;height:34px;border:2px solid var(--line);border-radius:6px;background:linear-gradient(90deg,transparent 0 0)}
+.cover-tile .mini::after{content:"";position:absolute;width:12px;height:14px;border-radius:2px;background:var(--accent)}
+.mini.left::after{left:3px}.mini.right::after{right:3px}.mini.top::after{top:3px}.mini.middle::after{top:calc(50% - 7px)}.mini.bottom::after{bottom:3px}
+.cover-tile small{font-size:12px}
+.pstep:not(:has(svg)){font-size:22px}

@@ -17,7 +17,7 @@ let uid = 0;
 const newId = () => "t" + Date.now().toString(36) + (uid++).toString(36);
 const makeTiers = (preset) => preset.map(([name, color]) => ({ id: newId(), name, color, keys: [] }));
 
-const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false, heroines: "show" };
+const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false, heroines: "show", awardCrown: "crown", awardButton: "metallic", coverSide: "left", coverPos: "top" };
 const VENN_COLORS = ["#e8467c", "#3aa0e0", "#f2b94b"];
 const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
@@ -915,6 +915,29 @@ function addAward(title, auto) {
   curAwards().cats.push({ id: newId(), title, auto: auto ?? autoOf(title), slots: [null, null, null], blurbs: ["", "", ""] }); return true;
 }
 
+// ---------- award designs: winner topper, place buttons, cover position ----------
+const topperHtml = () => { const d = CROWNS[state.ui.awardCrown]; return d ? `<span class="topper">${artSvg(d, 0)}</span>` : ""; };
+const stepHtml = (i) => { const d = BUTTONS[state.ui.awardButton]; return d ? artSvg(d, i, i + 1) : String(i + 1); };
+function renderDesigns() {
+  const u = state.ui, tile = (attr, key, inner, name, on) => `<button class="design-tile" ${attr}="${key}" aria-pressed="${on}">${inner}<span>${esc(name)}</span></button>`;
+  const crowns = tile("data-crown", "none", `<i class="none">–</i>`, "None", u.awardCrown === "none") + Object.entries(CROWNS).map(([k, d]) => tile("data-crown", k, artSvg(d, 0), d.name, u.awardCrown === k)).join("");
+  const buttons = tile("data-btn", "number", `<b class="plain">1 2 3</b>`, "Number only", u.awardButton === "number") + Object.entries(BUTTONS).map(([k, d]) => tile("data-btn", k, `<span class="trio">${[0, 1, 2].map((p) => artSvg(d, p, p + 1)).join("")}</span>`, d.name, u.awardButton === k)).join("");
+  const cover = `<div class="cover-grid">${["top", "middle", "bottom"].map((pos) => ["left", "right"].map((side) =>
+    `<button class="cover-tile" data-side="${side}" data-pos="${pos}" aria-pressed="${u.coverSide === side && u.coverPos === pos}"><span class="mini ${side} ${pos}"></span><small>${pos} · ${side}</small></button>`).join("")).join("")}</div>`;
+  $("#designBody").innerHTML = `<h3>Winner topper <small class="muted">(over 1st place)</small></h3><div class="design-grid">${crowns}</div>
+    <h3>Place buttons <small class="muted">(1st, 2nd, 3rd)</small></h3><div class="design-grid btns">${buttons}</div>
+    <h3>Cover position <small class="muted">(game awards)</small></h3>${cover}`;
+}
+function openDesigns() { renderDesigns(); openDlg("#designDlg"); }
+$("#designBody").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-crown],[data-btn],[data-side]"); if (!b) return;
+  if (b.dataset.crown) state.ui.awardCrown = b.dataset.crown;
+  else if (b.dataset.btn) state.ui.awardButton = b.dataset.btn;
+  else { state.ui.coverSide = b.dataset.side; state.ui.coverPos = b.dataset.pos; }
+  save(); renderDesigns(); render(); if (window.__exportRedraw) window.__exportRedraw();
+});
+$("#awDesigns").onclick = openDesigns;
+
 function awardsGridHtml() {
   const a = curAwards();
   if (!a.cats.length) return `<div class="awards-empty"><p><b>No awards yet.</b></p><p class="muted">Type your own award above, choose <b>Pick from list</b>, or add a pack (Classic, Chaos, Cry-fest).</p></div>`;
@@ -927,8 +950,8 @@ function awardsGridHtml() {
       <div class="podium">${order.map((i) => {
         const key = c.slots[i], it = key && visible(key) ? state.items[key] : null;
         return `<div class="pslot p${i + 1}" data-slot="${esc(c.id)}:${i}">
-          <div class="pcard">${it ? `${cardHtml(key)}${it.game && !state.awards.scope ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>
-          <div class="pstep s${i + 1}">${i + 1}</div>
+          <div class="pcard">${i === 0 && it ? topperHtml() : ""}${it ? `${cardHtml(key)}${it.game && !state.awards.scope ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>
+          <div class="pstep s${i + 1}">${stepHtml(i)}</div>
           <input class="ablurb" list="blurbIdeas" data-ab="${esc(c.id)}:${i}" value="${esc(c.blurbs[i])}" maxlength="120" placeholder="${i ? "why?" : "why it won…"}" aria-label="Blurb for place ${i + 1}"></div>`;
       }).join("")}</div>
     </section>`).join("")}</div>`;
@@ -939,7 +962,7 @@ function awardsBoardHtml() {
   if (!g) return grid;
   const cv = curAwards().cover;
   return `<div class="game-awards"><h2 class="gtitle">${esc(g.toUpperCase())} AWARDS</h2>${castBannerHtml(g)}
-    <div class="gbody"><aside class="gcover">${cv ? `<img src="${esc(imgSrc(cv.img))}" alt="Cover of ${esc(g)}">` : `<div class="gcover-ph">Looking for the cover…</div>`}</aside>${grid}</div></div>`;
+    <div class="gbody" data-side="${state.ui.coverSide === "right" ? "right" : "left"}" data-pos="${["middle", "bottom"].includes(state.ui.coverPos) ? state.ui.coverPos : "top"}"><aside class="gcover">${cv ? `<img src="${esc(imgSrc(cv.img))}" alt="Cover of ${esc(g)}">` : `<div class="gcover-ph">Looking for the cover…</div>`}</aside>${grid}</div></div>`;
 }
 
 // ---- a game's full cast: KoiLog knows who is in the game, whatever you imported before

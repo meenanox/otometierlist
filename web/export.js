@@ -199,8 +199,6 @@ async function renderImage(canvas, o) { return state.mode === "venn" ? renderVen
 
 
 // ---- award finishes: flat | metal (gradient steps) | glow (+ halos) | gala (+ spotlight, sparkles, crown)
-const AWARD_MEDAL = ["#d9ad45", "#aeb6c1", "#c0804f"];
-const AWARD_METAL = [["#fff3c2", "#e8c14f", "#9b7421"], ["#ffffff", "#c3cad4", "#7b8592"], ["#f6d1ae", "#c98a58", "#774825"]];
 function fxStep(c, fx, p, x, y, w, h, u, T, cx) {
   const r = Math.min(8 * u, T.radius > 0 ? 8 * u : 0), glowing = fx === "glow" || fx === "gala";
   if (glowing) { c.save(); c.shadowColor = AWARD_MEDAL[p]; c.shadowBlur = (p === 0 ? 26 : 14) * u; c.fillStyle = AWARD_MEDAL[p]; rr(c, x, y, w, h, r); c.fill(); c.restore(); }
@@ -212,6 +210,8 @@ function fxStep(c, fx, p, x, y, w, h, u, T, cx) {
     const sh = c.createLinearGradient(x, 0, x + w, 0); sh.addColorStop(0, "rgba(255,255,255,0)"); sh.addColorStop(0.28, "rgba(255,255,255,.34)"); sh.addColorStop(0.5, "rgba(255,255,255,0)"); sh.addColorStop(1, "rgba(0,0,0,.16)");
     c.fillStyle = sh; c.fillRect(x, y, w, h); c.fillStyle = "rgba(255,255,255,.6)"; c.fillRect(x, y, w, Math.max(1.5, 2.5 * u)); c.restore();
   }
+  const bd = BUTTONS[state.ui.awardButton];   // a chosen button design replaces the plain number
+  if (bd) { const s = Math.min(w * 0.5, Math.max(h * 1.05, 36 * u)); artDraw(c, bd, p, cx - s / 2, y + h / 2 - s / 2, s, s * bd.h / bd.w, p + 1, T.labelFont); return; }
   const fs = Math.round(28 * u * (T.mono ? 0.5 : 1)); c.font = `700 ${fs}px ${T.labelFont}`; c.textAlign = "center"; c.textBaseline = "middle";
   if (fx !== "flat") { c.fillStyle = "rgba(255,255,255,.55)"; c.fillText(String(p + 1), cx, y + h / 2 + 2 * u); }
   c.fillStyle = fx === "flat" ? "#2a2230" : "#3a2a12"; c.fillText(String(p + 1), cx, y + h / 2 + 1 * u);
@@ -247,6 +247,7 @@ async function renderAwardsImage(canvas, o) {
   await loadFonts();
   const A = curAwards(), dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style), namesN = +o.names;
   const fx = ["flat", "metal", "glow", "gala"].includes(o.fx) ? o.fx : "gala", glowOn = fx === "glow" || fx === "gala", gala = fx === "gala";
+  const crownDesign = CROWNS[state.ui.awardCrown], topperOn = !!crownDesign && fx !== "flat";
   let cats = A.cats.map((c) => ({ ...c, items: c.slots.map((s) => (s && visible(s) ? { key: s, ...state.items[s] } : null)) }));
   if (o.hideEmpty) cats = cats.filter((c) => c.items.some(Boolean));
   const medal = ["#d9ad45", "#aeb6c1", "#c0804f"], ratio = state.kind === "games" ? 1.42 : 1.25;
@@ -259,7 +260,7 @@ async function renderAwardsImage(canvas, o) {
     const u = cw / 520, ip = 20 * u, slotW = (cw - ip * 2 - 20 * u) / 3, pcw = Math.max(16, Math.min(slotW * 0.9, (+o.card || 100) * k)), pch = pcw * ratio;
     const nameFs = Math.max(9 * k, Math.min(18 * u, pcw * 0.15)), nameBlock = namesN ? nameFs * 1.25 * (namesN === 2 ? 3 : 2) + 6 * u : 4 * u;
     const steps = [60 * u, 42 * u, 30 * u], titleH = 56 * u;
-    const podiumH = Math.max(...steps.map((s) => s + pch + nameBlock + 6 * u)) + (gala ? pcw * 0.34 : 0);   // room for the crown
+    const podiumH = Math.max(...steps.map((s) => s + pch + nameBlock + 6 * u)) + (topperOn ? pcw * 0.34 : 0);   // room for the topper
     const blurbs = [];
     c.blurbs.forEach((t, i) => {
       if (!t || !c.items[i]) return;
@@ -276,7 +277,7 @@ async function renderAwardsImage(canvas, o) {
   };
   // a game's awards: its cover stands to the side of the award cards
   const scoped = A !== state.awards && state.awards.scope, coverImg = scoped && A.cover?.img ? await loadImg(A.cover.imgHi || A.cover.img) : null, coverAR = coverImg ? coverImg.height / coverImg.width : 1.42;
-  const geom = (Wc) => { const cvW = coverImg ? Math.round(Wc * 0.22) : 0, off = coverImg ? cvW + gap : 0, Lx = layout(Wc - off); return { L: Lx, cvW, off, H: Math.max(Lx.H, cvW * coverAR) }; };
+  const geom = (Wc) => { const side = state.ui.coverSide === "right" ? "right" : "left", cvW = coverImg ? Math.round(Wc * 0.22) : 0, taken = coverImg ? cvW + gap : 0, Lx = layout(Wc - taken); return { L: Lx, cvW, off: side === "left" ? taken : 0, cvX: side === "right" ? Wc - cvW : 0, H: Math.max(Lx.H, cvW * coverAR) }; };
   let sc = 1, G = geom(W - pad * 2), H;
   if (fixed) {
     H = fh;
@@ -298,10 +299,12 @@ async function renderAwardsImage(canvas, o) {
   }
   c.save(); c.translate(pad, m.top); c.scale(sc, sc);
   if (coverImg) {
-    const cw0 = G.cvW, ch0 = cw0 * coverAR, r0 = Math.max(4, T.cardRadius * k + 4);
+    const cw0 = G.cvW, ch0 = cw0 * coverAR, r0 = Math.max(4, T.cardRadius * k + 4), cpos = state.ui.coverPos;
+    c.save(); c.translate(G.cvX, cpos === "bottom" ? G.H - ch0 : cpos === "middle" ? (G.H - ch0) / 2 : 0);   // left or right, top, middle or bottom
     c.save(); c.shadowColor = "rgba(0,0,0,.45)"; c.shadowBlur = 16; c.shadowOffsetY = 5; c.fillStyle = "#000"; rr(c, 0, 0, cw0, ch0, r0); c.fill(); c.restore();
     c.save(); rr(c, 0, 0, cw0, ch0, r0); c.clip(); c.drawImage(coverImg, 0, 0, cw0, ch0); c.restore();
     c.save(); c.strokeStyle = medal[0]; c.lineWidth = 4; rr(c, 0, 0, cw0, ch0, r0); c.stroke(); c.restore();
+    c.restore();
   }
   let y = 0;
   for (const { row, h } of L.rows) {
@@ -330,7 +333,12 @@ async function renderAwardsImage(canvas, o) {
           if (glowOn) fxHalo(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k, p, (p === 0 ? 30 : p === 1 ? 14 : 10) * u);
           drawCard(c, imgs.get(it.key), cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k, T, it.label, k);
           c.save(); c.strokeStyle = medal[p]; c.lineWidth = Math.max(1.5, (p === 0 ? 4 : 2.5) * u); if (glowOn) { c.shadowColor = medal[p]; c.shadowBlur = (p === 0 ? 12 : 6) * u; } rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
-          if (gala && p === 0) { fxCrown(c, cx, cy + 2 * u, M.pcw * 0.4); fxSparkles(c, cx, cy + M.pch * 0.45, M.pcw * 0.78, M.pch * 0.62, u, 17 + cat.title.length * 31); }
+          if (topperOn && p === 0) {
+            const tw = M.pcw * 0.46, th = tw * crownDesign.h / crownDesign.w;
+            c.save(); if (glowOn) { c.shadowColor = "rgba(255,215,90,.9)"; c.shadowBlur = tw * 0.3; }
+            artDraw(c, crownDesign, 0, cx - tw / 2, cy - th * 0.72, tw, th); c.restore();
+          }
+          if (gala && p === 0) { fxSparkles(c, cx, cy + M.pch * 0.45, M.pcw * 0.78, M.pch * 0.62, u, 17 + cat.title.length * 31); }
           if (namesN) {
             c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillStyle = T.names; c.font = `600 ${Math.round(M.nameFs)}px ${T.mono ? T.labelFont : SANS}`;
             const lines = wrapLines(c, it.label, M.pcw + 14 * u, 2); lines.forEach((l, li) => c.fillText(l, cx, cy + M.pch + M.nameFs * 1.1 + li * M.nameFs * 1.25 + 3 * u));
@@ -642,7 +650,7 @@ function openTierExport() {
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
     $("#exHeroes").value = state.ui.heroines; $("#exHeroes").closest("label").hidden = state.kind === "games";
-    $("#exFx").value = o.fx; $("#exFx").closest("label").hidden = state.mode !== "awards";
+    $("#exFx").value = o.fx; $("#exFx").closest("label").hidden = state.mode !== "awards"; $("#exDesigns").hidden = state.mode !== "awards";
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier && state.mode !== "awards"; $("#exPool").closest("label").hidden = noTier;
     $("#exHideT").textContent = state.mode === "awards" ? "Hide awards with no winners" : "Hide empty tiers";
@@ -657,6 +665,7 @@ function openTierExport() {
     try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ ...o, title: "" })); } catch (e) { /* ignore */ }
   };
   const soon = () => { clearTimeout(timer); timer = setTimeout(draw, 250); };
+  window.__exportRedraw = soon; $("#exDesigns").onclick = openDesigns;
   dlg.oninput = dlg.onchange = () => {
     if ($("#exHeroes").value !== state.ui.heroines) { state.ui.heroines = $("#exHeroes").value; save(); render(); }
     Object.assign(o, { title: $("#exTitle").value, subtitle: $("#exSub").value, footer: $("#exFoot").value, size: $("#exSize").value, card: $("#exCard").value,
