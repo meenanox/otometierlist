@@ -188,3 +188,19 @@ body.kind-games .pempty{aspect-ratio:1/1.42}
 .gcover img{width:100%;display:block;border-radius:12px;border:3px solid #d9ad45;box-shadow:0 8px 24px #0004}
 .gcover-ph{aspect-ratio:1/1.42;border:2px dashed var(--line);border-radius:12px;display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center;padding:8px}
 .scope-row select{min-width:200px}
+
+/* ---- awards: shine on the board too ---- */
+.pstep{background-image:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,0) 45%,rgba(0,0,0,.18));box-shadow:0 0 12px -2px currentColor}
+.pstep.s1{background-color:#e2b84a;color:#e2b84a;box-shadow:0 0 22px 2px rgba(226,184,74,.65)}
+.pstep.s2{background-color:#bcc4cf;color:#bcc4cf;box-shadow:0 0 12px 1px rgba(188,196,207,.55)}
+.pstep.s3{background-color:#c98a58;color:#c98a58;box-shadow:0 0 10px 1px rgba(201,138,88,.5)}
+.pstep{text-shadow:0 1px 0 rgba(255,255,255,.55)}
+.pslot.p1 .pcard .card{box-shadow:0 0 0 2px #e2b84a,0 0 22px 5px rgba(226,184,74,.7);animation:winnerGlow 3.2s ease-in-out infinite}
+.pslot.p2 .pcard .card{box-shadow:0 0 0 2px #bcc4cf,0 0 12px 2px rgba(188,196,207,.55)}
+.pslot.p3 .pcard .card{box-shadow:0 0 0 2px #c98a58,0 0 10px 2px rgba(201,138,88,.5)}
+.pslot.p1 .pcard:has(.card)::before{content:"♛";position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:24px;line-height:1;color:#e8c14f;text-shadow:0 0 10px rgba(255,215,90,.9);z-index:1}
+.pslot.p1 .pcard{margin-top:22px}
+.award{box-shadow:0 0 0 1px rgba(226,184,74,.25),0 6px 22px -8px rgba(226,184,74,.45);background-image:radial-gradient(120% 70% at 50% 0%,rgba(226,184,74,.14),transparent 60%)}
+.atitle{text-shadow:0 0 14px rgba(226,184,74,.35)}
+@keyframes winnerGlow{0%,100%{box-shadow:0 0 0 2px #e2b84a,0 0 16px 3px rgba(226,184,74,.55)}50%{box-shadow:0 0 0 2px #f2cf6a,0 0 28px 8px rgba(242,207,106,.8)}}
+@media (prefers-reduced-motion:reduce){.pslot.p1 .pcard .card{animation:none}}

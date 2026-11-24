@@ -197,10 +197,56 @@ async function loadFonts() {
 
 async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : state.mode === "awards" ? renderAwardsImage(canvas, o) : renderTierImage(canvas, o); }
 
+
+// ---- award finishes: flat | metal (gradient steps) | glow (+ halos) | gala (+ spotlight, sparkles, crown)
+const AWARD_MEDAL = ["#d9ad45", "#aeb6c1", "#c0804f"];
+const AWARD_METAL = [["#fff3c2", "#e8c14f", "#9b7421"], ["#ffffff", "#c3cad4", "#7b8592"], ["#f6d1ae", "#c98a58", "#774825"]];
+function fxStep(c, fx, p, x, y, w, h, u, T, cx) {
+  const r = Math.min(8 * u, T.radius > 0 ? 8 * u : 0), glowing = fx === "glow" || fx === "gala";
+  if (glowing) { c.save(); c.shadowColor = AWARD_MEDAL[p]; c.shadowBlur = (p === 0 ? 26 : 14) * u; c.fillStyle = AWARD_MEDAL[p]; rr(c, x, y, w, h, r); c.fill(); c.restore(); }
+  if (fx === "flat") { c.fillStyle = AWARD_MEDAL[p]; rr(c, x, y, w, h, r); c.fill(); }
+  else {
+    const g = c.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, AWARD_METAL[p][0]); g.addColorStop(0.38, AWARD_METAL[p][1]); g.addColorStop(1, AWARD_METAL[p][2]);
+    c.fillStyle = g; rr(c, x, y, w, h, r); c.fill();
+    c.save(); rr(c, x, y, w, h, r); c.clip();
+    const sh = c.createLinearGradient(x, 0, x + w, 0); sh.addColorStop(0, "rgba(255,255,255,0)"); sh.addColorStop(0.28, "rgba(255,255,255,.34)"); sh.addColorStop(0.5, "rgba(255,255,255,0)"); sh.addColorStop(1, "rgba(0,0,0,.16)");
+    c.fillStyle = sh; c.fillRect(x, y, w, h); c.fillStyle = "rgba(255,255,255,.6)"; c.fillRect(x, y, w, Math.max(1.5, 2.5 * u)); c.restore();
+  }
+  const fs = Math.round(28 * u * (T.mono ? 0.5 : 1)); c.font = `700 ${fs}px ${T.labelFont}`; c.textAlign = "center"; c.textBaseline = "middle";
+  if (fx !== "flat") { c.fillStyle = "rgba(255,255,255,.55)"; c.fillText(String(p + 1), cx, y + h / 2 + 2 * u); }
+  c.fillStyle = fx === "flat" ? "#2a2230" : "#3a2a12"; c.fillText(String(p + 1), cx, y + h / 2 + 1 * u);
+}
+function fxHalo(c, x, y, w, h, r, p, strength) {
+  c.save(); c.fillStyle = AWARD_MEDAL[p]; c.shadowColor = AWARD_MEDAL[p]; c.shadowBlur = strength; rr(c, x, y, w, h, r); c.fill(); c.fill(); c.restore();
+}
+function fxCrown(c, cx, bottomY, w) {
+  const h = w * 0.72, x0 = cx - w / 2, y0 = bottomY - h;
+  c.save(); c.shadowColor = "rgba(255,215,90,.9)"; c.shadowBlur = w * 0.35;
+  const g = c.createLinearGradient(0, y0, 0, bottomY); g.addColorStop(0, "#fff3c2"); g.addColorStop(0.5, "#e8c14f"); g.addColorStop(1, "#9b7421"); c.fillStyle = g;
+  c.beginPath(); c.moveTo(x0, bottomY); c.lineTo(x0, y0 + h * 0.3); c.lineTo(x0 + w * 0.25, y0 + h * 0.62); c.lineTo(cx, y0); c.lineTo(x0 + w * 0.75, y0 + h * 0.62); c.lineTo(x0 + w, y0 + h * 0.3); c.lineTo(x0 + w, bottomY); c.closePath(); c.fill(); c.restore();
+  c.save(); c.strokeStyle = "rgba(120,80,10,.7)"; c.lineWidth = Math.max(1, w * 0.04); c.stroke(); c.restore();
+  for (const [gx, gy, col] of [[x0 + w * 0.5, y0 + h * 0.2, "#ff5d7a"], [x0 + w * 0.12, y0 + h * 0.42, "#7fd7ff"], [x0 + w * 0.88, y0 + h * 0.42, "#7fd7ff"]]) { c.fillStyle = col; c.beginPath(); c.arc(gx, gy, w * 0.06, 0, 7); c.fill(); }
+}
+function fxSparkles(c, cx, cy, rx, ry, u, seed) {
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  c.save(); c.shadowColor = "rgba(255,225,120,.95)"; c.shadowBlur = 8 * u;
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * 6.283, d = 0.78 + rnd() * 0.5, x = cx + Math.cos(a) * rx * d, y = cy + Math.sin(a) * ry * d, r = (3 + rnd() * 6) * u;
+    c.fillStyle = i % 3 === 0 ? "#fff6d0" : "#ffe27a"; c.globalAlpha = 0.65 + rnd() * 0.35;
+    c.beginPath(); for (let j = 0; j < 8; j++) { const rad = j % 2 ? r * 0.28 : r, ang = j * Math.PI / 4 - Math.PI / 2; c.lineTo(x + Math.cos(ang) * rad, y + Math.sin(ang) * rad); } c.closePath(); c.fill();
+  }
+  c.restore();
+}
+function fxBeam(c, cx, topY, baseY, wTop, wBottom, clipFn) {
+  c.save(); clipFn(); const g = c.createLinearGradient(0, topY, 0, baseY); g.addColorStop(0, "rgba(255,244,200,.36)"); g.addColorStop(0.55, "rgba(255,244,200,.12)"); g.addColorStop(1, "rgba(255,244,200,0)");
+  c.fillStyle = g; c.beginPath(); c.moveTo(cx - wTop / 2, topY); c.lineTo(cx + wTop / 2, topY); c.lineTo(cx + wBottom / 2, baseY); c.lineTo(cx - wBottom / 2, baseY); c.closePath(); c.fill(); c.restore();
+}
+
 async function renderAwardsImage(canvas, o) {
   const T = EXPORT_STYLES[o.style] || EXPORT_STYLES.pastel, { fixed, W, fh, k } = frameOf(o);
   await loadFonts();
   const A = curAwards(), dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style), namesN = +o.names;
+  const fx = ["flat", "metal", "glow", "gala"].includes(o.fx) ? o.fx : "gala", glowOn = fx === "glow" || fx === "gala", gala = fx === "gala";
   let cats = A.cats.map((c) => ({ ...c, items: c.slots.map((s) => (s && visible(s) ? { key: s, ...state.items[s] } : null)) }));
   if (o.hideEmpty) cats = cats.filter((c) => c.items.some(Boolean));
   const medal = ["#d9ad45", "#aeb6c1", "#c0804f"], ratio = state.kind === "games" ? 1.42 : 1.25;
@@ -213,7 +259,7 @@ async function renderAwardsImage(canvas, o) {
     const u = cw / 520, ip = 20 * u, slotW = (cw - ip * 2 - 20 * u) / 3, pcw = Math.max(16, Math.min(slotW * 0.9, (+o.card || 100) * k)), pch = pcw * ratio;
     const nameFs = Math.max(9 * k, Math.min(18 * u, pcw * 0.15)), nameBlock = namesN ? nameFs * 1.25 * (namesN === 2 ? 3 : 2) + 6 * u : 4 * u;
     const steps = [60 * u, 42 * u, 30 * u], titleH = 56 * u;
-    const podiumH = Math.max(...steps.map((s) => s + pch + nameBlock + 6 * u));
+    const podiumH = Math.max(...steps.map((s) => s + pch + nameBlock + 6 * u)) + (gala ? pcw * 0.34 : 0);   // room for the crown
     const blurbs = [];
     c.blurbs.forEach((t, i) => {
       if (!t || !c.items[i]) return;
@@ -266,23 +312,25 @@ async function renderAwardsImage(canvas, o) {
       if (T.rowShadow) { c.shadowColor = T.rowShadow; c.shadowBlur = 18 * u; c.shadowOffsetY = 6 * u; }
       c.fillStyle = T.rowFill || (dark ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.55)"); rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.fill(); c.restore();
       const edge = T.rowStroke === "tier" ? medal[0] : T.rowStroke || (dark ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.12)");
-      c.save(); c.strokeStyle = edge; c.lineWidth = Math.max(1, (T.rowLine || 1.5) * u); if (T.rowGlow) { c.shadowColor = medal[0]; c.shadowBlur = T.rowGlow * u; } rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.stroke(); c.restore();
+      c.save(); c.strokeStyle = edge; c.lineWidth = Math.max(1, (T.rowLine || 1.5) * u); if (T.rowGlow || glowOn) { c.shadowColor = medal[0]; c.shadowBlur = (T.rowGlow || 12) * u; } rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.stroke(); c.restore();
       // title
-      c.save(); c.fillStyle = T.title; c.textAlign = "center"; c.textBaseline = "middle"; if (T.glow) { c.shadowColor = T.glow; c.shadowBlur = 10 * u; }
+      c.save(); c.fillStyle = T.title; c.textAlign = "center"; c.textBaseline = "middle"; if (T.glow) { c.shadowColor = T.glow; c.shadowBlur = 10 * u; } else if (glowOn) { c.shadowColor = medal[0]; c.shadowBlur = 14 * u; }
       let fs = 30 * u * (T.mono ? 0.5 : 1); c.font = `700 ${Math.round(fs)}px ${T.labelFont}`;
       while (c.measureText(cat.title).width > L.cw - M.ip * 2 && fs > 9 * k) { fs *= 0.94; c.font = `700 ${Math.round(fs)}px ${T.labelFont}`; }
       c.fillText(cat.title, x + L.cw / 2, y + M.ip + M.titleH / 2 - 4 * u); c.restore();
       c.save(); c.strokeStyle = medal[0]; c.globalAlpha = 0.7; c.lineWidth = Math.max(1, 2 * u); c.beginPath(); c.moveTo(x + L.cw / 2 - 40 * u, y + M.ip + M.titleH - 6 * u); c.lineTo(x + L.cw / 2 + 40 * u, y + M.ip + M.titleH - 6 * u); c.stroke(); c.restore();
       // podium: 2nd | 1st | 3rd, standing on a common baseline
       const baseY = y + M.ip + M.titleH + M.podiumH, slotX = [1, 0, 2].map((p, n) => x + M.ip + n * (M.slotW + 10 * u));
+      if (gala && cat.items[0]) fxBeam(c, x + L.cw / 2, y + M.ip + M.titleH - 4 * u, baseY - M.steps[0], M.slotW * 0.25, M.slotW * 1.5, () => { rr(c, x, y, L.cw, h, Math.max(2, T.radius * u)); c.clip(); });
       [1, 0, 2].forEach((p, n) => {
         const sx = slotX[n], cx = sx + M.slotW / 2, stepH = M.steps[p], it = cat.items[p], top = baseY - stepH;
-        c.fillStyle = medal[p]; rr(c, sx, top, M.slotW, stepH, Math.min(8 * u, T.radius > 0 ? 8 * u : 0)); c.fill();
-        c.fillStyle = "#2a2230"; c.font = `700 ${Math.round(26 * u * (T.mono ? 0.5 : 1))}px ${T.labelFont}`; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(String(p + 1), cx, top + stepH / 2 + 1 * u);
+        fxStep(c, fx, p, sx, top, M.slotW, stepH, u, T, cx);
         const cy = top - 6 * u - M.pch - M.nameBlock;
         if (it) {
+          if (glowOn) fxHalo(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k, p, (p === 0 ? 30 : p === 1 ? 14 : 10) * u);
           drawCard(c, imgs.get(it.key), cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k, T, it.label, k);
-          c.save(); c.strokeStyle = medal[p]; c.lineWidth = Math.max(1.5, (p === 0 ? 4 : 2.5) * u); rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
+          c.save(); c.strokeStyle = medal[p]; c.lineWidth = Math.max(1.5, (p === 0 ? 4 : 2.5) * u); if (glowOn) { c.shadowColor = medal[p]; c.shadowBlur = (p === 0 ? 12 : 6) * u; } rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
+          if (gala && p === 0) { fxCrown(c, cx, cy + 2 * u, M.pcw * 0.4); fxSparkles(c, cx, cy + M.pch * 0.45, M.pcw * 0.78, M.pch * 0.62, u, 17 + cat.title.length * 31); }
           if (namesN) {
             c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillStyle = T.names; c.font = `600 ${Math.round(M.nameFs)}px ${T.mono ? T.labelFont : SANS}`;
             const lines = wrapLines(c, it.label, M.pcw + 14 * u, 2); lines.forEach((l, li) => c.fillText(l, cx, cy + M.pch + M.nameFs * 1.1 + li * M.nameFs * 1.25 + 3 * u));
@@ -582,7 +630,7 @@ function drawCard(c, img, x, y, w, h, r, T, label, k) {
 function openTierExport() {
   const dlg = $("#exportDlg");
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(EXPORT_KEY)) || {}; } catch (e) { /* ignore */ }
-  const o = { style: "pastel", title: state.name, subtitle: "", footer: "", size: "auto:1600", card: "100", names: "1", hideEmpty: true, pool: false, scale: "1", fmt: "png", titleScale: 100, subScale: 100, headGap: 100, ...saved };
+  const o = { fx: "gala", style: "pastel", title: state.name, subtitle: "", footer: "", size: "auto:1600", card: "100", names: "1", hideEmpty: true, pool: false, scale: "1", fmt: "png", titleScale: 100, subScale: 100, headGap: 100, ...saved };
   o.title = state.mode === "awards" && state.awards.scope ? `${state.awards.scope.toUpperCase()} AWARDS` : state.name;
   if (!EXPORT_STYLES[o.style]) o.style = "pastel";
   $("#exStyles").innerHTML = Object.entries(EXPORT_STYLES).map(([id, s]) =>
@@ -594,6 +642,7 @@ function openTierExport() {
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
     $("#exHeroes").value = state.ui.heroines; $("#exHeroes").closest("label").hidden = state.kind === "games";
+    $("#exFx").value = o.fx; $("#exFx").closest("label").hidden = state.mode !== "awards";
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier && state.mode !== "awards"; $("#exPool").closest("label").hidden = noTier;
     $("#exHideT").textContent = state.mode === "awards" ? "Hide awards with no winners" : "Hide empty tiers";
@@ -612,7 +661,7 @@ function openTierExport() {
     if ($("#exHeroes").value !== state.ui.heroines) { state.ui.heroines = $("#exHeroes").value; save(); render(); }
     Object.assign(o, { title: $("#exTitle").value, subtitle: $("#exSub").value, footer: $("#exFoot").value, size: $("#exSize").value, card: $("#exCard").value,
       scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked,
-      titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value });
+      titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value, fx: $("#exFx").value });
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) $(id).nextElementSibling.textContent = o[f] + "%";
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards"); soon();
   };
