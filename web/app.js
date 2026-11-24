@@ -17,7 +17,7 @@ let uid = 0;
 const newId = () => "t" + Date.now().toString(36) + (uid++).toString(36);
 const makeTiers = (preset) => preset.map(([name, color]) => ({ id: newId(), name, color, keys: [] }));
 
-const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false, heroines: "show", awardCrown: "crown", awardButton: "metallic", coverSide: "left", coverPos: "top" };
+const DEFAULT_UI = { poolPos: "right", poolW: 340, boardCard: 84, poolCard: 64, labelW: 96, labelFs: 22, vennCard: 56, axisCard: 7, captions: true, numbered: false, heroines: "show", awardCrown: "crown", awardButton: "metallic", awardPlaque: "step", coverSide: "left", coverPos: "top" };
 const VENN_COLORS = ["#e8467c", "#3aa0e0", "#f2b94b"];
 const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
@@ -924,14 +924,18 @@ function renderDesigns() {
   const buttons = tile("data-btn", "number", `<b class="plain">1 2 3</b>`, "Number only", u.awardButton === "number") + Object.entries(BUTTONS).map(([k, d]) => tile("data-btn", k, `<span class="trio">${[0, 1, 2].map((p) => artSvg(d, p, p + 1)).join("")}</span>`, d.name, u.awardButton === k)).join("");
   const cover = `<div class="cover-grid">${["top", "middle", "bottom"].map((pos) => ["left", "right"].map((side) =>
     `<button class="cover-tile" data-side="${side}" data-pos="${pos}" aria-pressed="${u.coverSide === side && u.coverPos === pos}"><span class="mini ${side} ${pos}"></span><small>${pos} · ${side}</small></button>`).join("")).join("")}</div>`;
+  const plaques = [["step", "Podium steps"], ["square", "Square plaque"], ["none", "Button only"]].map(([k, name]) =>
+    `<button class="design-tile" data-plaque="${k}" aria-pressed="${(["square", "none"].includes(u.awardPlaque) ? u.awardPlaque : "step") === k}"><span class="pl pl-${k}"><i></i><i></i><i></i></span><span>${name}</span></button>`).join("");
   $("#designBody").innerHTML = `<h3>Winner topper <small class="muted">(over 1st place)</small></h3><div class="design-grid">${crowns}</div>
     <h3>Place buttons <small class="muted">(1st, 2nd, 3rd)</small></h3><div class="design-grid btns">${buttons}</div>
+    <h3>Under the button <small class="muted">(plaque)</small></h3><div class="design-grid">${plaques}</div>
     <h3>Cover position <small class="muted">(game awards)</small></h3>${cover}`;
 }
 function openDesigns() { renderDesigns(); openDlg("#designDlg"); }
 $("#designBody").addEventListener("click", (e) => {
-  const b = e.target.closest("[data-crown],[data-btn],[data-side]"); if (!b) return;
-  if (b.dataset.crown) state.ui.awardCrown = b.dataset.crown;
+  const b = e.target.closest("[data-crown],[data-btn],[data-plaque],[data-side]"); if (!b) return;
+  if (b.dataset.plaque) state.ui.awardPlaque = b.dataset.plaque;
+  else if (b.dataset.crown) state.ui.awardCrown = b.dataset.crown;
   else if (b.dataset.btn) state.ui.awardButton = b.dataset.btn;
   else { state.ui.coverSide = b.dataset.side; state.ui.coverPos = b.dataset.pos; }
   save(); renderDesigns(); render(); if (window.__exportRedraw) window.__exportRedraw();
@@ -947,7 +951,7 @@ function awardsGridHtml() {
     <section class="award" data-cat="${esc(c.id)}">
       <header><input class="atitle" data-cat="${esc(c.id)}" value="${esc(c.title)}" maxlength="60" aria-label="Award name">
         <span class="actl"><button class="icon" data-aact="up" data-cat="${esc(c.id)}" ${ci ? "" : "disabled"} aria-label="Move up">↑</button><button class="icon" data-aact="down" data-cat="${esc(c.id)}" ${ci < a.cats.length - 1 ? "" : "disabled"} aria-label="Move down">↓</button><button class="icon" data-aact="del" data-cat="${esc(c.id)}" aria-label="Delete award">✕</button></span></header>
-      <div class="podium">${order.map((i) => {
+      <div class="podium" data-plaque="${["square", "none"].includes(state.ui.awardPlaque) ? state.ui.awardPlaque : "step"}">${order.map((i) => {
         const key = c.slots[i], it = key && visible(key) ? state.items[key] : null;
         return `<div class="pslot p${i + 1}" data-slot="${esc(c.id)}:${i}">
           <div class="pcard">${i === 0 && it ? topperHtml() : ""}${it ? `${cardHtml(key)}${it.game && !state.awards.scope ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>

@@ -237,3 +237,17 @@ body.kind-games .pempty{aspect-ratio:1/1.42}
 .mini.left::after{left:3px}.mini.right::after{right:3px}.mini.top::after{top:3px}.mini.middle::after{top:calc(50% - 7px)}.mini.bottom::after{bottom:3px}
 .cover-tile small{font-size:12px}
 .pstep:not(:has(svg)){font-size:22px}
+
+/* ---- plaque choice: podium steps | square plaque | button only ---- */
+.podium[data-plaque="square"] .pstep,.podium[data-plaque="none"] .pstep{height:52px}
+.podium[data-plaque="square"] .pstep{width:52px;margin:0 auto;border-radius:12px}
+.podium[data-plaque="none"] .pstep{width:100%;background:none;box-shadow:none;text-shadow:none;border-radius:0}
+.podium[data-plaque="none"] .pstep svg{height:50px}
+.podium[data-plaque="none"] .pstep:not(:has(svg)){font-size:28px}
+.podium[data-plaque="none"] .pstep.s1{color:#e2b84a;text-shadow:0 0 8px rgba(226,184,74,.7)}
+.podium[data-plaque="none"] .pstep.s2{color:#bcc4cf}.podium[data-plaque="none"] .pstep.s3{color:#c98a58}
+.pl{display:flex;align-items:flex-end;justify-content:center;gap:4px;height:46px}
+.pl i{display:block;width:15px;background:linear-gradient(180deg,#f3d37a,#b88a2a);border-radius:3px 3px 0 0}
+.pl-step i:nth-child(1){height:20px}.pl-step i:nth-child(2){height:30px}.pl-step i:nth-child(3){height:12px}
+.pl-square{align-items:center}.pl-square i{height:15px;border-radius:4px}
+.pl-none{align-items:center}.pl-none i{height:15px;border-radius:50%;background:none;border:3px solid #d9ad45}
