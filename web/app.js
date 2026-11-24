@@ -23,7 +23,7 @@ const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
 const makeAxis = () => ({ xMin: "Hate", xMax: "Love", yMin: "Villain", yMax: "Hero", grid: 10, aspect: "square", numbers: false, nMin: -5, nMax: 5,
   snap: false, axisColor: "", gridColor: "", quad: ["", "", "", ""], pos: {} });
-const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {} };
+const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null };
 let selected = null;
 
 // ---------- persistence ----------
@@ -46,9 +46,23 @@ function load(doc) {
   for (const [k, p] of Object.entries(ax.pos || {})) if (state.items[k] && p && isFinite(p.x) && isFinite(p.y)) state.axis.pos[k] = { x: +p.x, y: +p.y };
   state.ui = { ...DEFAULT_UI, ...(doc.ui || {}) };
   state.customPresets = doc.customPresets && typeof doc.customPresets === "object" ? doc.customPresets : {};
+  state.kind = doc.kind === "games" ? "games" : "characters";
+  const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
   return true;
 }
 try { load(JSON.parse(localStorage.getItem(STORE))); } catch (e) { /* first run */ }
+
+// ---------- two lists: characters and games ----------
+const LIST_KEYS = ["name", "mode", "tiers", "items", "order", "venn", "axis"];
+const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis() });
+function switchKind(kind) {
+  if (kind === state.kind) return;
+  const snap = Object.fromEntries(LIST_KEYS.map((k) => [k, state[k]]));
+  const next = state.other || freshList(kind);
+  LIST_KEYS.forEach((k) => (state[k] = next[k]));
+  state.other = snap; state.kind = kind; selected = null; save(); renderVennBar.lastMode = null;
+  render(); syncImportTabs();
+}
 
 // ---------- small helpers ----------
 function toast(msg, kind = "") {
@@ -63,7 +77,7 @@ function inkFor(hex) {
 const imgSrc = (u) => (u ? `/proxy/img?u=${encodeURIComponent(u)}` : "");
 // Heroine = the player character. KoiLog "protagonist" / VNDB "main". Double-click a card to flip it by hand.
 const isHeroine = (it) => (it.heroine !== undefined ? !!it.heroine : it.role === "heroine");
-const heroOk = (it) => { const m = state.ui.heroines; return m === "show" || (m === "hide" ? !isHeroine(it) : isHeroine(it)); };
+const heroOk = (it) => { if (state.kind === "games") return true; const m = state.ui.heroines; return m === "show" || (m === "hide" ? !isHeroine(it) : isHeroine(it)); };
 const visible = (k) => !!state.items[k] && heroOk(state.items[k]);
 const roleOf = (r) => ({ protagonist: "heroine", main: "heroine", love_interest: "love", primary: "love", side: "side" }[r] || "other");
 const roleOk = (role, who) => who === "all" || (role === "heroine" && (who === "love+heroine" || who === "heroine")) || (role === "love" && (who === "love" || who === "love+heroine"));
@@ -84,6 +98,10 @@ function applyUi() {
   document.body.classList.toggle("no-captions", !u.captions);
   document.body.classList.toggle("pool-bottom", u.poolPos === "bottom");
   r.setProperty("--axis-card", u.axisCard);
+  const games = state.kind === "games";
+  document.body.classList.toggle("kind-games", games);
+  $("#heroFilter").hidden = games; $("#btnAuto").hidden = games && state.mode !== "tier";
+  $("#kindSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === state.kind)));
   document.body.classList.toggle("is-venn", state.mode === "venn");
   document.body.classList.toggle("is-axis", state.mode === "axis");
 }
@@ -147,7 +165,7 @@ function vennBoardHtml() {
   const regs = Object.entries(g.regions).map(([k, r]) => {
     const keys = (v.regions[k] || []).filter(visible);
     const ppu = ($("#board").clientWidth || 900) / 100;
-    const cw = keys.length ? fitCard(keys.length, r.w * 0.92 * ppu, r.h * 0.86 * ppu, state.ui.vennCard, 16) : state.ui.vennCard;
+    const cw = keys.length ? fitCard(keys.length, r.w * 0.92 * ppu, r.h * 0.86 * ppu, state.ui.vennCard, 16, 3, state.kind === "games" ? 1.42 : 1.25) : state.ui.vennCard;
     return `<div class="vregion" data-region="${k}" style="left:${px(r.cx)};top:${py(r.cy)};width:${px(r.w * 0.92)};--venn-card:${cw}px">${keys.map((x) => cardHtml(x)).join("")}</div>`;
   }).join("");
   return `<div class="venn" id="venn" style="aspect-ratio:100/${g.vh.toFixed(2)}">${circ}${labs}${regs}</div>`;
@@ -426,13 +444,23 @@ async function runImport(btn, job) {
   try {
     const r = await job();
     $("#impStatus").hidden = false; $("#impBar").style.width = "100%";
-    $("#impMsg").textContent = `Done: ${r.added} new character${r.added === 1 ? "" : "s"} from ${r.games} game${r.games === 1 ? "" : "s"}.`;
-    toast(`Added ${r.added} characters`);
+    const noun = state.kind === "games" ? "game" : "character";
+    $("#impMsg").textContent = state.kind === "games" ? `Done: ${r.added} new game${r.added === 1 ? "" : "s"} added.` : `Done: ${r.added} new character${r.added === 1 ? "" : "s"} from ${r.games} game${r.games === 1 ? "" : "s"}.`;
+    toast(`Added ${r.added} ${noun}${r.added === 1 ? "" : "s"}`);
   } catch (err) { $("#impStatus").hidden = false; $("#impMsg").textContent = "⚠ " + err.message; toast(err.message, "error"); }
   finally { importing = false; btn.disabled = false; }
 }
 
-$("#btnImport").onclick = () => openDlg("#importDlg");
+function syncImportTabs() {
+  const tabs = $$(".tabs [data-tab]");
+  tabs.forEach((b) => (b.hidden = b.dataset.kind !== state.kind));
+  const cur = tabs.find((b) => b.getAttribute("aria-pressed") === "true" && !b.hidden) || tabs.find((b) => !b.hidden);
+  tabs.forEach((b) => b.setAttribute("aria-pressed", String(b === cur)));
+  $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== cur.dataset.tab));
+  $("label.who").hidden = state.kind === "games"; $("#impStatus").hidden = true;
+}
+$("#btnImport").onclick = () => { syncImportTabs(); openDlg("#importDlg"); };
+$("#kindSeg").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b) switchKind(b.dataset.kind); };
 $$(".tabs [data-tab]").forEach((b) => (b.onclick = () => {
   $$(".tabs [data-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
@@ -460,6 +488,59 @@ $("#nmGo").onclick = async () => {
   };
 };
 $("#nmIn").onkeydown = (e) => e.key === "Enter" && $("#nmGo").click();
+
+// ---------- game tier list: VNDB covers ----------
+const GAME_FIELDS = "id,title,alttitle,released,image.url,image.thumbnail";
+function gameItem(v, vote) {
+  return { key: "vng:" + v.id, kind: "game", label: v.title, alt: v.alttitle || "", game: (v.released || "").slice(0, 4),
+    img: v.image?.thumbnail || v.image?.url || "", imgHi: v.image?.url || v.image?.thumbnail || "", vote: vote || 0, rating: vote ? Math.max(1, Math.round(vote / 20)) : 0 };
+}
+async function vndbUserId(name) {
+  if (/^u\d+$/i.test(name)) return name.toLowerCase();
+  const r = await vndb("user?q=" + encodeURIComponent(name), null, "GET");
+  const id = r[name]?.id || Object.values(r).find(Boolean)?.id;
+  if (!id) throw new Error("VNDB user not found");
+  return id;
+}
+async function importVndbGames(input, which, progress) {
+  const ids = [...new Set((input.match(/\bv\d+\b/gi) || []).map((s) => s.toLowerCase()))];
+  let added = 0;
+  if (ids.length) {
+    for (let i = 0; i < ids.length; i += 50) {
+      progress(i / ids.length, `Reading games ${Math.min(i + 50, ids.length)} of ${ids.length}…`);
+      const vns = await vndbAll("vn", { filters: ["or", ...ids.slice(i, i + 50).map((id) => ["id", "=", id])], fields: GAME_FIELDS });
+      added += addItems(vns.map((v) => gameItem(v)));
+    }
+    return { added, games: added };
+  }
+  const name = input.trim(); if (!name) throw new Error("Enter VN ids or a VNDB username");
+  progress(0, "Looking up VNDB user…");
+  const u = await vndbUserId(name);
+  const labels = { played: [1, 2, 3, 4], finished: [2], wishlist: [5], all: [1, 2, 3, 4, 5] }[which] || [1, 2, 3, 4];
+  progress(0, "Reading their list…");
+  const list = await vndbAll("ulist", { user: u, fields: "id,vote,vn.title,vn.alttitle,vn.released,vn.image.url,vn.image.thumbnail",
+    filters: labels.length === 1 ? ["label", "=", labels[0]] : ["or", ...labels.map((l) => ["label", "=", l])] });
+  if (!list.length) throw new Error("That list has no matching games (or it's private)");
+  added = addItems(list.filter((x) => x.vn).map((x) => gameItem({ id: x.id, ...x.vn }, x.vote)));
+  return { added, games: list.length };
+}
+$("#gvGo").onclick = (e) => runImport(e.target, () => importVndbGames($("#gvIn").value, $("#gvList").value, setStatus));
+$("#gvIn").onkeydown = (e) => e.key === "Enter" && $("#gvGo").click();
+$("#gnGo").onclick = async () => {
+  const q = $("#gnIn").value.trim(); if (q.length < 2) return;
+  $("#gnRes").innerHTML = `<p class="muted">Searching…</p>`;
+  let rows = [];
+  try { rows = (await vndb("vn", { filters: ["search", "=", q], fields: GAME_FIELDS, results: 25 })).results; } catch (err) { $("#gnRes").innerHTML = `<p class="muted">⚠ ${esc(err.message)}</p>`; return; }
+  $("#gnRes").innerHTML = rows.length ? `<div class="res"><span class="rt"><b>${rows.length} results</b></span><button class="ghost" data-all="1">Add all</button></div>` +
+    rows.map((v, i) => `<div class="res">${v.image?.thumbnail ? `<img src="${esc(imgSrc(v.image.thumbnail))}" alt="">` : ""}<span class="rt">${esc(v.title)}<small>${esc((v.released || "").slice(0, 4))} · ${esc(v.id)}</small></span><button class="ghost" data-res="${i}">Add</button></div>`).join("") : `<p class="muted">No results.</p>`;
+  $("#gnRes").onclick = (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const pick = b.dataset.all ? rows : [rows[+b.dataset.res]];
+    runImport(b, async () => ({ added: addItems(pick.map((v) => gameItem(v))), games: pick.length }));
+  };
+};
+$("#gnIn").onkeydown = (e) => e.key === "Enter" && $("#gnGo").click();
+
 
 // ---------- rank editor ----------
 const allPresets = () => ({ ...TIER_PRESETS, ...state.customPresets });
@@ -656,7 +737,7 @@ function autoFillVenn(rated) {
 }
 $("#btnAuto").onclick = () => {
   const rated = state.order.filter((k) => state.items[k]?.rating);
-  if (!rated.length) return toast("No KoiLog character ratings loaded. Import a KoiLog user with ratings ticked.", "error");
+  if (!rated.length) return toast(state.kind === "games" ? "No VNDB votes loaded. Import a VNDB user list that has votes." : "No KoiLog character ratings loaded. Import a KoiLog user with ratings ticked.", "error");
   if (state.mode === "axis") { const n = autoPlotAxis(rated); save(); render(); return toast(n ? `Plotted ${n} characters by your ratings` : "No characters with looks and personality ratings (re-import to refresh)", n ? "" : "error"); }
   if (state.mode === "venn") { const n = autoFillVenn(rated); save(); render(); return toast(n ? `Placed ${n} characters by your ratings` : "None of your rated characters have a 5★ aspect (re-import to refresh)", n ? "" : "error"); }
   autoRankTiers(rated); save(); render(); toast(`Placed ${rated.length} characters by your rating`);

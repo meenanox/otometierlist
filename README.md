@@ -20,6 +20,9 @@ Maintainers: run `python make_zip.py` after changing the app and commit the refr
 - **Axis chart:** a cross chart (like an alignment chart). Drag characters anywhere on it. Set the four end labels, grid size (or none), square or wide shape, optional numbered scale, snap-to-grid, axis/grid colours and corner labels. **Auto-plot from ratings** puts personality left to right and looks bottom to top.
 - **Venn diagram:** 2 or 3 circles with your own names and colours. Drop a character where circles overlap to put them in several groups. **Auto-fill from ratings** makes Looks / Personality / Voice circles from your 5★ aspect ratings.
 
+## Game tier lists
+Switch **Characters / Games** at the top for a second, separate list made of game covers from VNDB. Import by VN ids, a VNDB username or user id (choose which of their labels to use: played, finished only, wishlist, everything), or search by name. Your VNDB votes become ratings for **Auto-rank by rating**. Games get all three styles (tier list, Venn diagram, axis chart), the same customisation, and the same 8 export styles and 17 sizes. Each list keeps its own placements, and both are saved.
+
 ## Heroines
 Heroines (the player character) are tagged on import: KoiLog "protagonist", VNDB "main". Choose **Who to add** in the import box (love interests, love interests + heroines, heroines only, everyone). Then use the **Heroines: show / hide / only** menu above the pool, or the Heroines option when exporting, to filter them in or out. Heroines show a pink ♀ badge; double-click a card and choose Mark as heroine to change one by hand.
 

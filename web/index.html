@@ -13,6 +13,7 @@
   <h1>Tier List Studio <small>characters from KoiLog &amp; VNDB</small></h1>
   <div class="top-actions">
     <input id="listName" value="My character tier list" aria-label="List name">
+    <span class="seg" id="kindSeg" title="Two separate lists"><button data-kind="characters" aria-pressed="true">Characters</button><button data-kind="games" aria-pressed="false">Games</button></span>
     <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button></span>
     <button id="btnImport" class="primary">Import characters</button>
     <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
@@ -49,9 +50,11 @@
 <dialog id="importDlg" class="sheet">
   <header class="sheet-head"><h2>Import characters</h2><button class="icon" data-close aria-label="Close">✕</button></header>
   <nav class="tabs">
-    <button data-tab="koilog" aria-pressed="true">KoiLog user</button>
-    <button data-tab="vndb">VNDB</button>
-    <button data-tab="name">Search by name</button>
+    <button data-tab="koilog" data-kind="characters" aria-pressed="true">KoiLog user</button>
+    <button data-tab="vndb" data-kind="characters">VNDB</button>
+    <button data-tab="name" data-kind="characters">Search by name</button>
+    <button data-tab="gvndb" data-kind="games" aria-pressed="false" hidden>VNDB list or ids</button>
+    <button data-tab="gname" data-kind="games" hidden>Search games</button>
   </nav>
   <div class="sheet-body">
     <div data-pane="koilog">
@@ -63,6 +66,17 @@
     <div data-pane="vndb" hidden>
       <p class="muted">Paste VN ids (<code>v17, v2002</code>), or a VNDB username / user id (<code>u1234</code>) to use their list.</p>
       <div class="row"><input id="vnIn" placeholder="v17, v2002   or   username / u1234"><button id="vnGo" class="primary">Import</button></div>
+    </div>
+    <div data-pane="gvndb" hidden>
+      <p class="muted">Adds game covers from VNDB. Paste VN ids (<code>v17, v2002</code>) or a VNDB username / user id to use their list. Their votes become ratings for Auto-rank.</p>
+      <div class="row"><input id="gvIn" placeholder="v17, v2002   or   username / u1234"><button id="gvGo" class="primary">Import</button></div>
+      <label class="who">From their list <select id="gvList">
+        <option value="played">Playing, finished, stalled, dropped</option><option value="finished">Finished only</option>
+        <option value="wishlist">Wishlist</option><option value="all">Everything (incl. wishlist)</option></select></label>
+    </div>
+    <div data-pane="gname" hidden>
+      <div class="row"><input id="gnIn" placeholder="game name"><button id="gnGo" class="primary">Search</button></div>
+      <div id="gnRes" class="results"></div>
     </div>
     <div data-pane="name" hidden>
       <div class="row"><input id="nmIn" placeholder="game or character name"><button id="nmGo" class="primary">Search</button></div>

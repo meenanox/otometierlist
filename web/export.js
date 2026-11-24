@@ -122,6 +122,8 @@ const EXPORT_SIZES = [
 const EXPORT_KEY = "tierlistStudio.export";
 const imgCache = new Map();
 
+// Small thumbnails are plenty for small cards (and much faster); full-size art only when cards are drawn big.
+const pickImg = (it, px) => (px > 190 ? it.imgHi || it.img : it.img || it.imgHi);
 function loadImg(url) {
   if (!url) return Promise.resolve(null);
   if (!imgCache.has(url)) imgCache.set(url, new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = imgSrc(url); }));
@@ -271,8 +273,8 @@ async function renderAxisImage(canvas, o) {
   // characters
   const items = Object.entries(a.pos).filter(([key]) => visible(key)).map(([key, p]) => ({ key, p, ...state.items[key] }));
   const imgs = new Map();
-  for (let i = 0; i < items.length; i += 16) await Promise.all(items.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
-  const cw = plotW * (state.ui.axisCard || 7) / 100, ch = cw * 1.25, namesN = +o.names;
+  for (let i = 0; i < items.length; i += 16) await Promise.all(items.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(pickImg(it, plotW * (state.ui.axisCard || 7) / 100 * pxScale)))));
+  const cw = plotW * (state.ui.axisCard || 7) / 100, ch = cw * (state.kind === "games" ? 1.42 : 1.25), namesN = +o.names;
   for (const it of items) {
     const x = px + it.p.x * plotW - cw / 2, y = py + it.p.y * plotH - ch / 2;
     drawCard(c, imgs.get(it.key), x, y, cw, ch, T.cardRadius * k, T, it.label, k);
@@ -317,13 +319,13 @@ async function renderVennImage(canvas, o) {
 
   // cards: one shared size, as large as every region allows
   const regs = Object.entries(g.regions).map(([key, r]) => ({ key, r, items: (v.regions[key] || []).map((x) => ({ key: x, ...state.items[x] })).filter((it) => it.label && heroOk(it)) })).filter((q) => q.items.length);
-  const all = regs.flatMap((q) => q.items), namesN = +o.names, gap = 6 * k, ratio = 1.25;
+  const all = regs.flatMap((q) => q.items), namesN = +o.names, gap = 6 * k, ratio = state.kind === "games" ? 1.42 : 1.25;
   const cellH = (cw) => cw * ratio + (namesN ? Math.max(9 * k, Math.min(24 * k, cw * 0.14)) * 1.3 + 4 * k : 0);
   const cap = Math.max(14 * k, +o.card * k);
   for (const q of regs) q.cw = fitCard(q.items.length, q.r.w * u * 0.86, q.r.h * u * 0.86, cap, 14 * k, gap, ratio, (w) => (namesN ? Math.max(9 * k, Math.min(24 * k, w * 0.14)) * 1.3 + 4 * k : 0));
   const cw0 = Math.min(...regs.map((q) => q.cw));
   const imgs = new Map();
-  for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
+  for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(pickImg(it, Math.max(...regs.map((q) => q.cw)) * pxScale)))));
   for (const q of regs) {
     const cw = q.cw, nameFs = Math.max(9 * k, Math.min(24 * k, cw * 0.14)), ch = cw * ratio;
     const bw = q.r.w * u * 0.86, per = Math.max(1, Math.floor((bw + gap) / (cw + gap))), rows = Math.ceil(q.items.length / per);
@@ -359,7 +361,7 @@ async function renderTierImage(canvas, o) {
   const pad = T.pad * k, labelW = T.labelW * k, rowPad = T.rowPad * k, rowGap = T.rowGap * k, gap = 10 * k;
   const hm = headerMetrics(T, o, k), footH = hm.footH, top = hm.top;
   const innerW = W - pad * 2 - labelW - rowPad * 2;
-  const ratio = 1.25;
+  const ratio = state.kind === "games" ? 1.42 : 1.25;
   const namesN = +o.names;
   const plan = (cardW) => {
     const nameFs = Math.max(10 * k, Math.min(30 * k, cardW * 0.14));
@@ -386,7 +388,7 @@ async function renderTierImage(canvas, o) {
   drawHeader(c, T, o, W, k, hm);
 
   const imgs = new Map(); const all = shown.flatMap((r) => r.items);
-  for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(it.imgHi || it.img))));
+  for (let i = 0; i < all.length; i += 16) await Promise.all(all.slice(i, i + 16).map(async (it) => imgs.set(it.key, await loadImg(pickImg(it, P.cardW * pxScale)))));
 
   let y = top; const x0 = pad, rowW = W - pad * 2;
   for (const row of shown) {
@@ -455,7 +457,7 @@ function drawCard(c, img, x, y, w, h, r, T, label, k) {
   if (img) {
     const tr = w / h, ar = img.width / img.height; let sw, sh, sx = 0;
     if (ar > tr) { sh = img.height; sw = sh * tr; sx = (img.width - sw) / 2; } else { sw = img.width; sh = sw / tr; }
-    c.drawImage(img, sx, 0, sw, sh, x, y, w, h);   // keep the top of the picture (faces)
+    c.drawImage(img, sx, state.kind === "games" ? (img.height - sh) / 2 : 0, sw, sh, x, y, w, h);   // characters: keep the top (faces); game covers: centre
   } else {
     c.fillStyle = T.empty; c.fillRect(x, y, w, h); c.fillStyle = "#fff"; c.font = `600 ${Math.round(w * 0.4)}px ${SANS}`;
     c.textAlign = "center"; c.textBaseline = "middle"; c.fillText((label || "?")[0], x + w / 2, y + h / 2);
@@ -478,7 +480,7 @@ function openTierExport() {
     $("#exTitle").value = o.title; $("#exSub").value = o.subtitle; $("#exFoot").value = o.footer; $("#exSize").value = o.size; $("#exCard").value = o.card;
     $("#exScale").value = o.scale; $("#exFmt").value = o.fmt; $("#exNames").value = o.names; $("#exHide").checked = o.hideEmpty; $("#exPool").checked = o.pool;
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
-    $("#exHeroes").value = state.ui.heroines;
+    $("#exHeroes").value = state.ui.heroines; $("#exHeroes").closest("label").hidden = state.kind === "games";
     $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier; $("#exPool").closest("label").hidden = noTier;
   };
@@ -488,7 +490,7 @@ function openTierExport() {
     const mine = ++run; $("#exBusy").hidden = false;
     const info = await renderImage($("#exCanvas"), o);
     if (mine !== run) return; $("#exBusy").hidden = true;
-    $("#exInfo").textContent = `${info.px[0]}×${info.px[1]} px · ${info.cards} characters · cards ${info.card}px` + (info.missing ? ` · ⚠ ${info.missing} picture(s) failed to load` : "");
+    $("#exInfo").textContent = `${info.px[0]}×${info.px[1]} px · ${info.cards} ${state.kind === "games" ? "games" : "characters"} · cards ${info.card}px` + (info.missing ? ` · ⚠ ${info.missing} picture(s) failed to load` : "");
     try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ ...o, title: "" })); } catch (e) { /* ignore */ }
   };
   const soon = () => { clearTimeout(timer); timer = setTimeout(draw, 250); };
