@@ -204,12 +204,13 @@ function render() {
   // how many are flagged, so the filter never fails silently
   const allKeys = state.order.filter((k) => state.items[k]);
   const nHero = allKeys.filter((k) => isHeroine(state.items[k])).length, nManual = allKeys.filter((k) => state.items[k].heroine !== undefined).length;
+  const nRoleless = allKeys.filter((k) => !state.items[k].role && !state.items[k].kind).length;
   const hiddenByFilter = state.order.filter((k) => !inBoard.has(k) && state.items[k] && !heroOk(state.items[k])).length;
   let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
   if (!all && hiddenByFilter) {
     empty = `<div class="muted empty"><p>The <b>Heroines: ${state.ui.heroines}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${state.ui.heroines === "only" && !nHero ? " None of your characters are flagged as heroines." : ""}</p>
-      <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
-      ${state.ui.heroines === "only" && !nHero ? `<p>Heroines are tagged when you import. Re-import with <b>Who to add</b> set to a choice that includes heroines, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
+      <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nRoleless ? `<button class="primary" data-hero="detect" title="Looks up each character's role on KoiLog / VNDB">Detect heroines (${nRoleless})</button>` : ""}${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
+      ${state.ui.heroines === "only" && !nHero ? `<p>Heroines are tagged when you import. Use <b>Detect heroines</b> for characters imported earlier, re-import with <b>Who to add</b> set to a choice that includes heroines, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
   }
   $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || empty;
   $("#poolCount").textContent = all ? `${all} unranked` : "";
@@ -313,17 +314,21 @@ function addItems(list) {
 
 // ---------- KoiLog ----------
 async function kl(path) {
-  const r = await fetch("/proxy/koilog/" + path);
-  if (r.status === 404) throw new Error("Not found on KoiLog");
-  if (!r.ok) throw new Error(`KoiLog said ${r.status}`);
-  return r.json();
+  for (let attempt = 0; ; attempt++) {
+    let r;
+    try { r = await fetch("/proxy/koilog/" + path); } catch (e) { if (attempt >= 3) throw e; await new Promise((x) => setTimeout(x, 600 * (attempt + 1))); continue; }
+    if (r.status === 404) throw new Error("Not found on KoiLog");
+    if (r.ok) return r.json();
+    if (attempt >= 3 || ![429, 500, 502, 503, 504].includes(r.status)) throw new Error(`KoiLog said ${r.status}`);
+    await new Promise((x) => setTimeout(x, 600 * (attempt + 1)));   // busy: wait and try again
+  }
 }
 const pickName = (names, def = true) => (names || []).find((n) => n.default)?.value || (names || [])[0]?.value || "";
 const origName = (names) => (names || []).find((n) => n.isOriginal)?.value || (names || []).find((n) => n.lang === "ja")?.value || "";
 const gameTitle = (g) => (g.titles || []).find((t) => t.default)?.value || (g.titles || [])[0]?.value || "";
 
 function klCharItem(c, game, extra = {}) {
-  return { key: "kl:" + c.id, role: roleOf(c.role), label: pickName(c.names), alt: origName(c.names), game: gameTitle(game),
+  return { key: "kl:" + c.id, role: roleOf(c.role), gid: game.id, label: pickName(c.names), alt: origName(c.names), game: gameTitle(game),
     img: c.avatarUrls?.thumbnail || "", imgHi: c.avatarUrls?.original || "", ...extra };
 }
 
@@ -346,28 +351,29 @@ async function importKoilogUser(input, onlyPlayed, withRatings, who, progress) {
   }
   const wanted = (r) => !onlyPlayed || (r.routeStatus && r.routeStatus !== "TO_PLAY");
   const targets = games.filter((g) => (g.routeStatuses || []).some(wanted));
-  let done = 0, added = 0;
+  let done = 0, added = 0, failed = 0;
   await mapPool(targets, 8, async (g) => {
     try {
       const [game, chars] = await Promise.all([kl("games/" + g.id), kl(`games/${g.id}/characters`)]);
       const byId = Object.fromEntries(chars.map((c) => [c.id, c]));
-      const items = [], seen = new Set();
-      for (const rs of g.routeStatuses || []) {   // love interests: only routes you've started (if ticked)
-        const c = byId[rs.characterId]; if (!c || !wanted(rs) || !roleOk("love", who)) continue;
-        const rt = ratings[c.id]; seen.add(c.id);
-        items.push(klCharItem(c, game, { role: "love", status: rs.routeStatus, rating: rt?.overall || 0,
+      // KoiLog's route list also contains the heroine and "major" characters, so the role comes from the character list, not from having a route.
+      const routeOf = Object.fromEntries((g.routeStatuses || []).map((rs) => [rs.characterId, rs]));
+      const items = [];
+      for (const c of chars) {
+        const rs = routeOf[c.id]; let role = roleOf(c.role);
+        if (rs && role !== "heroine") role = "love";                       // has a route: treat as a love interest
+        if (!roleOk(role, who)) continue;
+        if (role === "love" && onlyPlayed && !(rs && wanted(rs))) continue; // love interests: only routes you've started (if ticked)
+        const rt = ratings[c.id];
+        items.push(klCharItem(c, game, { role, ...(rs ? { status: rs.routeStatus } : {}), rating: rt?.overall || 0,
           sub: rt ? [rt.appearance || 0, rt.storyline || 0, rt.personality || 0, rt.voiceActing || 0] : [] }));
       }
-      for (const c of chars) {                    // heroines and everyone else, by role
-        const role = roleOf(c.role); if (seen.has(c.id) || role === "love" || !roleOk(role, who)) continue;
-        const rt = ratings[c.id];
-        items.push(klCharItem(c, game, { rating: rt?.overall || 0, sub: rt ? [rt.appearance || 0, rt.storyline || 0, rt.personality || 0, rt.voiceActing || 0] : [] }));
-      }
       added += addItems(items);
-    } catch (e) { /* skip a game that fails */ }
+    } catch (e) { failed++; }
     progress(++done / targets.length, `Fetched ${done} of ${targets.length} games · ${added} characters`);
   });
   if (!$("#listName").dataset.touched && state.name === "My character tier list") { state.name = `${user.displayName || name}'s characters`; save(); render(); }
+  if (failed) throw new Error(`${failed} of ${targets.length} games could not be read from KoiLog (${added} characters were added). Run the import again to fetch the rest.`);
   return { added, games: targets.length };
 }
 
@@ -789,10 +795,56 @@ $("#fileIn").onchange = async (e) => {
   e.target.value = "";
 };
 $("#btnExport").onclick = () => openTierExport();
+
+// ---------- detect heroines for characters imported without a role ----------
+const bestRole = (roles) => (roles.includes("love") ? "love" : roles.includes("heroine") ? "heroine" : roles.includes("side") ? "side" : roles[0] || "other");
+const gameTitleById = {};
+const titleOfGame = (id) => (gameTitleById[id] ||= kl("games/" + id).then(gameTitle).catch(() => ""));
+const sameTitle = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+async function detectRoles() {
+  if (detectRoles.busy) return;
+  const todo = state.order.filter((k) => state.items[k] && !state.items[k].role && !state.items[k].kind);
+  if (!todo.length) return toast("Every character already has a role");
+  detectRoles.busy = true; let found = 0;
+  try {
+    const kls = todo.filter((k) => k.startsWith("kl:")), vns = todo.filter((k) => k.startsWith("vn:"));
+    let done = 0; toast(`Checking ${todo.length} characters…`);
+    await mapPool(kls, 8, async (k) => {
+      try {
+        const c = await kl("characters/" + k.slice(3)), it = state.items[k], ap = c.appearsIn || [];
+        const roles = [...new Set(ap.map((a) => roleOf(a.role)))];
+        if (roles.length > 1) {   // a love interest in one game can be the protagonist in another: use the game you imported
+          let hit = it.gid ? ap.find((a) => a.gameId === it.gid) : null;
+          for (let i = 0; !hit && i < ap.length; i++) if (sameTitle(await titleOfGame(ap[i].gameId), it.game)) hit = ap[i];
+          it.role = hit ? roleOf(hit.role) : bestRole(roles);
+        } else it.role = roles[0] || "other";
+        found++;
+      } catch (e) { /* skip */ }
+      if (++done % 25 === 0) toast(`Checked ${done} of ${todo.length}…`);
+    });
+    for (let i = 0; i < vns.length; i += 50) {
+      try {
+        const part = vns.slice(i, i + 50);
+        const rs = await vndbAll("character", { filters: ["or", ...part.map((k) => ["id", "=", k.slice(3)])], fields: "id,vns.id,vns.title,vns.role" });
+        for (const c of rs) {
+          const k = "vn:" + c.id, it = state.items[k]; if (!it) continue;
+          const vs = c.vns || [], roles = [...new Set(vs.map((v) => roleOf(v.role)))];
+          const hit = roles.length > 1 ? vs.find((v) => sameTitle(v.title, it.game)) : null;
+          it.role = hit ? roleOf(hit.role) : roles.length > 1 ? bestRole(roles) : roles[0] || "other"; found++;
+        }
+      } catch (e) { /* skip */ }
+    }
+  } finally { detectRoles.busy = false; }
+  save(); render();
+  const h = Object.values(state.items).filter(isHeroine).length;
+  toast(`Checked ${found} characters: ${h} heroine${h === 1 ? "" : "s"} in this list`, found ? "" : "error");
+}
+$("#btnDetect").onclick = () => { detectRoles(); $("#btnDetect").closest("details").open = false; };
 $("#heroFilter").onchange = (e) => { state.ui.heroines = e.target.value; save(); render(); };
 $("#pool").addEventListener("click", (e) => {
   const b = e.target.closest("[data-hero]"); if (!b) return;
   selected = null; e.stopPropagation();
+  if (b.dataset.hero === "detect") { detectRoles(); return; }
   if (b.dataset.hero === "show") state.ui.heroines = "show";
   else Object.values(state.items).forEach((it) => { delete it.heroine; });
   save(); render();
