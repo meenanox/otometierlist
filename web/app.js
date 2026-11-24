@@ -247,7 +247,12 @@ document.addEventListener("drop", (e) => {
 });
 document.addEventListener("click", (e) => {
   const c = e.target.closest?.(".card");
-  if (c) { selected = selected === c.dataset.key ? null : c.dataset.key; render(); return; }
+  if (c) {
+    const key = c.dataset.key, now = Date.now();
+    if (lastClick.key === key && now - lastClick.t < 400) { lastClick = { key: "", t: 0 }; selected = null; render(); openCardMenu(key, e.clientX, e.clientY); return; } // double-click
+    lastClick = { key, t: now };
+    selected = selected === key ? null : key; render(); return;
+  }
   if (!selected) return;
   if (state.mode !== "tier") { const d = dropTarget(e); if (d) moveKey(selected, d.tier, null, d.at); return; }
   const zone = e.target.closest?.("#board .tier, #pool");
@@ -693,12 +698,44 @@ $("#fileIn").onchange = async (e) => {
 };
 $("#btnExport").onclick = () => openTierExport();
 $("#heroFilter").onchange = (e) => { state.ui.heroines = e.target.value; save(); render(); };
-// double-click a card to mark / unmark it as a heroine by hand
-document.addEventListener("dblclick", (e) => {
-  const c = e.target.closest?.(".card"); if (!c) return;
-  const it = state.items[c.dataset.key]; if (!it) return;
-  it.heroine = !isHeroine(it); selected = null; save(); render(); toast(it.heroine ? `${it.label} marked as a heroine` : `${it.label} is no longer marked as a heroine`);
-});
+// ---------- double-click a card to pick where it goes ----------
+let lastClick = { key: "", t: 0 };
+function closeCardMenu() { $("#cardMenu")?.remove(); }
+function openCardMenu(key, x, y) {
+  closeCardMenu();
+  const it = state.items[key]; if (!it) return;
+  const opts = [];
+  if (state.mode === "tier") {
+    const cur = state.tiers.find((t) => t.keys.includes(key));
+    state.tiers.forEach((t) => opts.push({ html: `<i style="background:${esc(t.color)}"></i>${esc(t.name)}${cur === t ? " ✓" : ""}`, run: () => moveKey(key, t.id) }));
+  } else if (state.mode === "venn") {
+    const v = state.venn, g = vennGeom(v), cur = Object.entries(v.regions).find(([, a]) => a.includes(key))?.[0];
+    Object.keys(g.regions).sort((a, b) => a.length - b.length || a.localeCompare(b)).forEach((k) => {
+      const names = k.split("").map((i) => v.circles[+i].name || `Circle ${+i + 1}`);
+      const cols = k.split("").map((i) => v.circles[+i].color);
+      opts.push({ html: `<i style="background:linear-gradient(90deg,${cols.join(",")}${cols.length < 2 ? "," + cols[0] : ""})"></i>${esc(names.length === 1 ? names[0] + " only" : names.join(" + "))}${cur === k ? " ✓" : ""}`, run: () => moveKey(key, k) });
+    });
+  } else {
+    const a = state.axis, q = a.quad, j = () => (Math.random() - 0.5) * 0.12;
+    [["Top left", q[0], 0.25, 0.25], ["Top right", q[1], 0.75, 0.25], ["Bottom left", q[2], 0.25, 0.75], ["Bottom right", q[3], 0.75, 0.75], ["Centre", "", 0.5, 0.5]]
+      .forEach(([n, lab, px, py]) => opts.push({ html: `${esc(n)}${lab ? ` <small>${esc(lab)}</small>` : ""}`, run: () => moveKey(key, "axis", null, { x: px + j(), y: py + j() }) }));
+  }
+  opts.push({ sep: true });
+  if (placed().has(key)) opts.push({ html: "↩ Back to the pool", run: () => moveKey(key, "") });
+  opts.push({ html: isHeroine(it) ? "♀ Unmark as heroine" : "♀ Mark as heroine", run: () => { it.heroine = !isHeroine(it); save(); render(); } });
+  opts.push({ html: "✕ Remove character", danger: true, run: () => removeItem(key) });
+  const m = document.createElement("div"); m.id = "cardMenu"; m.className = "card-menu";
+  m.innerHTML = `<div class="cm-h">Move <b>${esc(it.label)}</b> to…</div>` + opts.map((o, i) => (o.sep ? `<hr>` : `<button data-i="${i}"${o.danger ? ' class="danger"' : ""}>${o.html}</button>`)).join("");
+  document.body.appendChild(m);
+  m.style.left = Math.max(8, Math.min(x, innerWidth - m.offsetWidth - 8)) + "px";
+  m.style.top = Math.max(8, Math.min(y, innerHeight - m.offsetHeight - 8)) + "px";
+  m.onclick = (e) => { const b = e.target.closest("[data-i]"); if (b) { closeCardMenu(); opts[+b.dataset.i].run(); } };
+}
+document.addEventListener("mousedown", (e) => { if (!e.target.closest?.("#cardMenu")) closeCardMenu(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeCardMenu(); });
+addEventListener("scroll", closeCardMenu, true);
+
+
 let resizeT; addEventListener("resize", () => { if (state.mode !== "venn") return; clearTimeout(resizeT); resizeT = setTimeout(render, 200); });
 
 render();
