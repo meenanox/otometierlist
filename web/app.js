@@ -46,15 +46,48 @@ let selected = null;
 // ---------- persistence ----------
 // The saved list can be a megabyte, so a burst of changes (an import adds a game at a time) is written once.
 let saveTimer = 0, saveDirty = false;
-function saveNow() { clearTimeout(saveTimer); if (!saveDirty) return; saveDirty = false; try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* storage full or blocked: ignore */ } }
+function saveNow() {
+  clearTimeout(saveTimer); if (!saveDirty) return; saveDirty = false;
+  try { localStorage.setItem(STORE, JSON.stringify(slimState())); saveNow.warned = false; }
+  catch (e) {   // storage full or blocked: say so once, instead of quietly losing changes
+    if (!saveNow.warned) { saveNow.warned = true; toast("Couldn't save: the browser's storage is full or blocked. Use More → Save list to file to keep a copy.", "error"); }
+  }
+}
 function save() { saveDirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 300); }
 addEventListener("pagehide", saveNow); addEventListener("beforeunload", saveNow);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveNow(); });
 // ...and a burst of redraws is drawn once per frame
 let renderRaf = 0;
 function renderSoon() { if (!renderRaf) renderRaf = requestAnimationFrame(() => { renderRaf = 0; render(); }); }
+// What gets saved leaves out what can be rebuilt on load (about a third of the size): each character's own key, the full-size
+// picture link when it is the thumbnail link with one word changed, a games list that only repeats the one game, and empty values.
+const deriveHi = (u) => (u ? u.replace("/thumbnail.webp", "/original.webp").replace("/cv.t/", "/cv/") : "");
+function slimItem(it) {
+  const o = { ...it }; delete o.key;
+  if (o.imgHi && o.imgHi === deriveHi(o.img)) delete o.imgHi;
+  if (o.games && o.games.length === 1 && o.games[0] === o.game) delete o.games;
+  if (o.alt === o.label) delete o.alt;
+  if (!o.rating) delete o.rating;
+  if (Array.isArray(o.sub) && !o.sub.some(Boolean)) delete o.sub;
+  if (o.vote === 0) delete o.vote;
+  return o;
+}
+function hydrateItems(items) {   // the reverse; harmless on items that are already complete
+  const out = {};
+  for (const [k, it] of Object.entries(items && typeof items === "object" ? items : {})) {
+    if (!it || typeof it !== "object") continue;
+    const o = { ...it, key: k }; if (o.img && !o.imgHi) o.imgHi = deriveHi(o.img);
+    out[k] = o;
+  }
+  return out;
+}
+function slimState() {
+  const slim = (items) => Object.fromEntries(Object.entries(items || {}).map(([k, it]) => [k, slimItem(it)]));
+  return { ...state, items: slim(state.items), other: state.other ? { ...state.other, items: slim(state.other.items) } : null };
+}
 function load(doc) {
   if (!doc || !Array.isArray(doc.tiers)) return false;
+  doc = { ...doc, items: hydrateItems(doc.items) };
   state.name = doc.name || state.name;
   state.tiers = doc.tiers.map((t) => ({ id: t.id || newId(), name: t.name || "", color: t.color || "#888888", keys: (t.keys || []).filter((k) => doc.items && doc.items[k]) }));
   state.items = doc.items || {};
@@ -76,7 +109,7 @@ function load(doc) {
     byGame: Object.fromEntries(Object.entries(aw.byGame && typeof aw.byGame === "object" ? aw.byGame : {}).slice(0, 600).map(([g, v]) => [g.slice(0, 200), cleanAwardSet(v)])) };
   state.kind = doc.kind === "games" ? "games" : "characters";
   const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
-  if (state.other) state.other.awards = fixAwards(state.other.awards);
+  if (state.other) { state.other.awards = fixAwards(state.other.awards); state.other.items = hydrateItems(state.other.items); }
   if (state.kind === "games") state.awards.scope = "";
   return true;
 }
@@ -865,7 +898,7 @@ $("#btnClear").onclick = () => {
 };
 $("#btnSave").onclick = () => {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], { type: "application/json" }));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(slimState())], { type: "application/json" }));
   a.download = (state.name.replace(/[^\w-]+/g, "-") || "tier-list") + ".json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 };
 $("#btnLoad").onclick = () => $("#fileIn").click();
