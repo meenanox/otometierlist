@@ -23,7 +23,18 @@ const makeVenn = (n = 3) => ({ n, size: 100, overlap: 55,
   circles: [["Best personality", 0], ["Best design", 1], ["Best voice", 2]].map(([name, i]) => ({ name, color: VENN_COLORS[i] })), regions: {} });
 const makeAxis = () => ({ xMin: "Hate", xMax: "Love", yMin: "Villain", yMax: "Hero", grid: 10, aspect: "square", numbers: false, nMin: -5, nMax: 5,
   snap: false, axisColor: "", gridColor: "", quad: ["", "", "", ""], pos: {} });
-const makeAwards = () => ({ cols: 0, cats: [] });
+const makeAwards = () => ({ cols: 0, cats: [], scope: "", byGame: {} });
+const awardSets = () => [state.awards, ...Object.values(state.awards.byGame || {})];                 // every set of awards (all games)
+const curAwards = () => (state.awards.scope ? (state.awards.byGame[state.awards.scope] ||= { cols: 0, cats: [] }) : state.awards);   // the set being edited
+const gamesOf = (it) => it?.games || (it?.game ? [it.game] : []);
+const inScope = (k) => state.mode !== "awards" || !state.awards.scope || gamesOf(state.items[k]).includes(state.awards.scope);
+function cleanAwardSet(aw) {
+  aw = aw || {};
+  const cv = aw.cover && typeof aw.cover.img === "string" ? { img: aw.cover.img.slice(0, 500), imgHi: String(aw.cover.imgHi || aw.cover.img).slice(0, 500) } : null;
+  return { cols: Math.min(4, Math.max(0, +aw.cols || 0)), ...(cv ? { cover: cv } : {}), cats: (Array.isArray(aw.cats) ? aw.cats : []).filter((c) => c && typeof c.title === "string").slice(0, 80).map((c) => ({
+    id: c.id || newId(), title: c.title.slice(0, 60), auto: c.auto || "",
+    slots: [0, 1, 2].map((i) => (c.slots && state.items[c.slots[i]] ? c.slots[i] : null)), blurbs: [0, 1, 2].map((i) => String(c.blurbs?.[i] || "").slice(0, 120)) })) };
+}
 const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null, awards: makeAwards() };
 let selected = null;
 
@@ -48,9 +59,8 @@ function load(doc) {
   state.ui = { ...DEFAULT_UI, ...(doc.ui || {}) };
   state.customPresets = doc.customPresets && typeof doc.customPresets === "object" ? doc.customPresets : {};
   const aw = doc.awards || {};
-  state.awards = { cols: Math.min(4, Math.max(0, +aw.cols || 0)), cats: (Array.isArray(aw.cats) ? aw.cats : []).filter((c) => c && typeof c.title === "string").slice(0, 80).map((c) => ({
-    id: c.id || newId(), title: c.title.slice(0, 60), auto: c.auto || "",
-    slots: [0, 1, 2].map((i) => (c.slots && state.items[c.slots[i]] ? c.slots[i] : null)), blurbs: [0, 1, 2].map((i) => String(c.blurbs?.[i] || "").slice(0, 120)) })) };
+  state.awards = { ...cleanAwardSet(aw), scope: typeof aw.scope === "string" ? aw.scope.slice(0, 200) : "", last: typeof aw.last === "string" ? aw.last.slice(0, 200) : "",
+    byGame: Object.fromEntries(Object.entries(aw.byGame && typeof aw.byGame === "object" ? aw.byGame : {}).slice(0, 600).map(([g, v]) => [g.slice(0, 200), cleanAwardSet(v)])) };
   state.kind = doc.kind === "games" ? "games" : "characters";
   const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
   return true;
@@ -190,7 +200,7 @@ function render() {
   if (renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderAxisBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
   $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode];
-  $("#awardsBar").hidden = state.mode !== "awards"; $("#awCols").value = String(state.awards.cols); fillPackMenu();
+  $("#awardsBar").hidden = state.mode !== "awards"; $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar();
   if (state.mode === "awards") $("#board").innerHTML = awardsBoardHtml();
   else if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
   else if (venn) $("#board").innerHTML = vennBoardHtml();
@@ -201,7 +211,7 @@ function render() {
     </div>`).join("");
   const inBoard = placed();
   const q = $("#poolSearch").value.trim().toLowerCase();
-  let keys = state.order.filter((k) => !inBoard.has(k) && visible(k));
+  let keys = state.order.filter((k) => !inBoard.has(k) && visible(k) && inScope(k));
   const all = keys.length;
   if (q) keys = keys.filter((k) => `${state.items[k].label} ${state.items[k].alt || ""} ${state.items[k].game || ""}`.toLowerCase().includes(q));
   const sort = $("#poolSort").value;
@@ -311,7 +321,7 @@ function removeItem(key) {
   state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => k !== key)));
   Object.values(state.venn.regions).forEach((a) => { const j = a.indexOf(key); if (j >= 0) a.splice(j, 1); });
   delete state.axis.pos[key];
-  state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s))));
+  awardSets().forEach((st) => st.cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s)))));
   delete state.items[key]; state.order = state.order.filter((k) => k !== key); save(); render();
 }
 
@@ -321,7 +331,8 @@ function addItems(list) {
   for (const it of list) {
     if (!it.key || !it.label) continue;
     if (!state.items[it.key]) { state.order.push(it.key); n++; }
-    state.items[it.key] = { ...state.items[it.key], ...it };
+    const prev = state.items[it.key], gs = new Set([...(prev?.games || (prev?.game ? [prev.game] : [])), ...(it.games || (it.game ? [it.game] : []))]);
+    state.items[it.key] = { ...prev, ...it, ...(gs.size ? { games: [...gs] } : {}) };
   }
   save(); render(); return n;
 }
@@ -342,7 +353,7 @@ const origName = (names) => (names || []).find((n) => n.isOriginal)?.value || (n
 const gameTitle = (g) => (g.titles || []).find((t) => t.default)?.value || (g.titles || [])[0]?.value || "";
 
 function klCharItem(c, game, extra = {}) {
-  return { key: "kl:" + c.id, role: roleOf(c.role), gid: game.id, label: pickName(c.names), alt: origName(c.names), game: gameTitle(game),
+  return { key: "kl:" + c.id, role: roleOf(c.role), gid: game.id, label: pickName(c.names), alt: origName(c.names), game: gameTitle(game), games: [gameTitle(game)],
     img: c.avatarUrls?.thumbnail || "", imgHi: c.avatarUrls?.original || "", ...extra };
 }
 
@@ -422,7 +433,7 @@ async function vndbCharactersFor(vnIds, who, progress) {
     for (const c of chars) {
       const link = (c.vns || []).find((v) => part.includes(v.id) && roleOk(roleOf(v.role), who));
       if (!link) continue;
-      items.push({ key: "vn:" + c.id, role: roleOf(link.role), label: c.name, alt: c.original || "", game: titles[link.id] || link.id, img: vndbImg(c), imgHi: vndbImg(c) });
+      items.push({ key: "vn:" + c.id, role: roleOf(link.role), label: c.name, alt: c.original || "", game: titles[link.id] || link.id, games: [titles[link.id] || link.id], img: vndbImg(c), imgHi: vndbImg(c) });
     }
     added += addItems(items);
   }
@@ -775,7 +786,7 @@ $("#btnAuto").onclick = () => {
   autoRankTiers(rated); save(); render(); toast(`Placed ${rated.length} characters by your rating`);
 };
 $("#btnReset").onclick = () => {
-  if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else if (state.mode === "awards") state.awards.cats.forEach((c) => (c.slots = [null, null, null])); else state.tiers.forEach((t) => (t.keys = []));
+  if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else if (state.mode === "awards") curAwards().cats.forEach((c) => (c.slots = [null, null, null])); else state.tiers.forEach((t) => (t.keys = []));
   save(); render(); $("#btnReset").closest("details").open = false;
 };
 // Reset character pool: removes the unranked characters shown in the pool; anything already on the board stays.
@@ -788,7 +799,7 @@ function resetPool() {
   const gone = new Set(keys);
   state.tiers.forEach((t) => (t.keys = t.keys.filter((k) => !gone.has(k))));
   Object.values(state.venn.regions).forEach((a) => { for (let i = a.length - 1; i >= 0; i--) if (gone.has(a[i])) a.splice(i, 1); });
-  state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (gone.has(s) ? null : s))));
+  awardSets().forEach((st) => st.cats.forEach((c) => (c.slots = c.slots.map((s) => (gone.has(s) ? null : s)))));
   keys.forEach((k) => { delete state.axis.pos[k]; delete state.items[k]; });
   state.order = state.order.filter((k) => !gone.has(k));
   selected = null; save(); render(); toast(`Removed ${keys.length} from the pool`);
@@ -797,7 +808,7 @@ $("#btnPoolReset").onclick = () => { resetPool(); $("#btnPoolReset").closest("de
 $("#btnPoolReset2").onclick = resetPool;
 $("#btnClear").onclick = () => {
   if (!confirm("Remove every character from this list? Ranks and circles are kept.")) return;
-  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; state.awards.cats.forEach((c) => (c.slots = [null, null, null])); state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
+  state.tiers.forEach((t) => (t.keys = [])); state.venn.regions = {}; state.axis.pos = {}; awardSets().forEach((st) => st.cats.forEach((c) => (c.slots = [null, null, null]))); state.items = {}; state.order = []; save(); render(); $("#btnClear").closest("details").open = false;
 };
 $("#btnSave").onclick = () => {
   const a = document.createElement("a");
@@ -868,9 +879,9 @@ $("#pool").addEventListener("click", (e) => {
 // ---------- awards: podiums with blurbs ----------
 const AWARD_LIB = {
   characters: [
-    ["Characters", [["Best design", "looks"], ["Best voice acting", "voice"], ["Best personality", "personality"], ["Best glow-up / development"], ["Best villain"], ["Best side character"], ["Best heroine"],
+    ["Characters", [["Best design", "looks"], ["Best voice acting", "voice"], ["Best personality", "personality"], ["Hottest character", "looks"], ["Funniest character"], ["Best glow-up / development"], ["Best villain"], ["Best side character"], ["Best heroine"],
       ["Character you hated, then loved"], ["Most red flags (but loved anyway)"], ["Most likely to need therapy"], ["Best \"I'd die for him\""], ["Best hair"], ["Best outfit"], ["Best dramatic entrance"], ["Best mom-friend / dad-friend"], ["Cutest"]]],
-    ["Routes", [["Saddest route"], ["Best route ending"], ["Best bad end"], ["Best slow burn"], ["Most wholesome route"], ["Most unhinged route"], ["Spiciest route"], ["Most disappointing route"],
+    ["Routes", [["Favourite route", "rating"], ["Best arc", "rating"], ["Saddest arc"], ["Funniest arc"], ["Most romantic arc"], ["Saddest route"], ["Best route ending"], ["Best bad end"], ["Best slow burn"], ["Most wholesome route"], ["Most unhinged route"], ["Spiciest route"], ["Most disappointing route"],
       ["Best confession scene"], ["Best plot twist"], ["Best true route"], ["Best kiss scene"], ["Most convoluted route"], ["Best writing", "story"]]],
     ["Overall", [["Favourite overall", "rating"], ["Best romance"], ["Most underrated"], ["Most overhyped"]]],
   ],
@@ -882,7 +893,8 @@ const AWARD_LIB = {
 const AWARD_PACKS = {
   characters: { "Classic": ["Best design", "Best voice acting", "Best personality", "Best villain", "Best side character", "Favourite overall"],
     "Chaos": ["Most red flags (but loved anyway)", "Most likely to need therapy", "Character you hated, then loved", "Most unhinged route", "Best dramatic entrance", "Best hair"],
-    "Cry-fest": ["Saddest route", "Best bad end", "Best confession scene", "Best slow burn", "Most wholesome route", "Best true route"] },
+    "Cry-fest": ["Saddest route", "Best bad end", "Best confession scene", "Best slow burn", "Most wholesome route", "Best true route"],
+    "This game": ["Best arc", "Saddest arc", "Hottest character", "Best design", "Best voice acting", "Funniest character"] },
   games: { "Classic": ["Best overall", "Best story", "Best art / CGs", "Best soundtrack", "Best romance", "Best cast"],
     "Chaos": ["Most convoluted plot", "Most overhyped", "Biggest surprise", "Most underrated", "Best comfort game", "Best first impression"],
     "Cry-fest": ["Best cry", "Best ending", "Best mystery", "Best worldbuilding", "Best sequel / fandisc", "Most replayable"] },
@@ -891,11 +903,11 @@ const awardLib = () => AWARD_LIB[state.kind === "games" ? "games" : "characters"
 const autoOf = (title) => awardLib().flatMap(([, list]) => list).find(([t]) => t === title)?.[1] || "";
 function addAward(title, auto) {
   title = String(title || "").trim().slice(0, 60); if (!title) return false;
-  state.awards.cats.push({ id: newId(), title, auto: auto ?? autoOf(title), slots: [null, null, null], blurbs: ["", "", ""] }); return true;
+  curAwards().cats.push({ id: newId(), title, auto: auto ?? autoOf(title), slots: [null, null, null], blurbs: ["", "", ""] }); return true;
 }
 
-function awardsBoardHtml() {
-  const a = state.awards;
+function awardsGridHtml() {
+  const a = curAwards();
   if (!a.cats.length) return `<div class="awards-empty"><p><b>No awards yet.</b></p><p class="muted">Type your own award above, choose <b>Pick from list</b>, or add a pack (Classic, Chaos, Cry-fest).</p></div>`;
   const gridCols = a.cols ? `repeat(${a.cols},minmax(0,1fr))` : "repeat(auto-fill,minmax(320px,1fr))";
   const order = [1, 0, 2];
@@ -906,27 +918,58 @@ function awardsBoardHtml() {
       <div class="podium">${order.map((i) => {
         const key = c.slots[i], it = key && visible(key) ? state.items[key] : null;
         return `<div class="pslot p${i + 1}" data-slot="${esc(c.id)}:${i}">
-          <div class="pcard">${it ? `${cardHtml(key)}${it.game ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>
+          <div class="pcard">${it ? `${cardHtml(key)}${it.game && !state.awards.scope ? `<small class="agame">${esc(it.game)}</small>` : ""}<button class="aclear" data-aclear="${esc(c.id)}:${i}" aria-label="Remove from podium">✕</button>` : `<div class="pempty">${["1st", "2nd", "3rd"][i]}</div>`}</div>
           <div class="pstep s${i + 1}">${i + 1}</div>
           <input class="ablurb" list="blurbIdeas" data-ab="${esc(c.id)}:${i}" value="${esc(c.blurbs[i])}" maxlength="120" placeholder="${i ? "why?" : "why it won…"}" aria-label="Blurb for place ${i + 1}"></div>`;
       }).join("")}</div>
     </section>`).join("")}</div>`;
 }
 
+function awardsBoardHtml() {
+  const g = state.awards.scope, grid = awardsGridHtml();
+  if (!g) return grid;
+  const cv = curAwards().cover;
+  return `<div class="game-awards"><h2 class="gtitle">${esc(g.toUpperCase())} AWARDS</h2>
+    <div class="gbody"><aside class="gcover">${cv ? `<img src="${esc(imgSrc(cv.img))}" alt="Cover of ${esc(g)}">` : `<div class="gcover-ph">Looking for the cover…</div>`}</aside>${grid}</div></div>`;
+}
+// find the game's cover once and remember it: saved game id, then KoiLog by title, then VNDB by title
+async function resolveGameCover(g) {
+  const set = curAwards(); if (!g || set.cover?.img) return;
+  const coverOf = (game) => (game?.coverImageUrls?.thumbnail ? { img: game.coverImageUrls.thumbnail, imgHi: game.coverImageUrls.original || game.coverImageUrls.thumbnail } : null);
+  const it = state.order.map((k) => state.items[k]).find((i) => i && i.game === g && i.gid);
+  let cover = null;
+  try { if (it?.gid) cover = coverOf(await kl("games/" + it.gid)); } catch (e) { /* try the next way */ }
+  if (!cover) {
+    try {
+      const r = await kl(`games?searchQuery=${encodeURIComponent(g)}&pageSize=10`);
+      const hit = (r.data || []).find((x) => (x.titles || []).some((t) => sameTitle(t.value, g)));
+      cover = coverOf(hit);
+    } catch (e) { /* try the next way */ }
+  }
+  if (!cover) {
+    try {
+      const r = await vndb("vn", { filters: ["search", "=", g], fields: "id,title,image.url,image.thumbnail", results: 5 });
+      const hit = r.results.find((x) => sameTitle(x.title, g)) || r.results[0];
+      if (hit?.image) cover = { img: hit.image.thumbnail || hit.image.url, imgHi: hit.image.url || hit.image.thumbnail };
+    } catch (e) { /* no cover */ }
+  }
+  if (cover) { set.cover = cover; save(); render(); } else if (state.awards.scope === g) { const ph = $(".gcover-ph"); if (ph) ph.textContent = "No cover found"; }
+}
+
 function placeAward(key, at) {
-  const [cid, i] = at.split(":"), c = state.awards.cats.find((x) => x.id === cid); if (!c) return;
+  const [cid, i] = at.split(":"), c = curAwards().cats.find((x) => x.id === cid); if (!c) return;
   c.slots = c.slots.map((s, j) => (j === +i ? key : s === key ? null : s));   // a character can win many awards, but only one place in each
 }
-const awardKeys = () => new Set(state.awards.cats.flatMap((c) => c.slots.filter(Boolean)));
+const awardKeys = () => new Set(awardSets().flatMap((st) => st.cats.flatMap((c) => c.slots.filter(Boolean))));
 
 // board edits (typing keeps focus: save without redrawing)
 $("#board").addEventListener("input", (e) => {
-  const t = e.target, a = state.awards;
+  const t = e.target, a = curAwards();
   if (t.classList.contains("atitle")) { const c = a.cats.find((x) => x.id === t.dataset.cat); if (c) { c.title = t.value; c.auto = autoOf(t.value); save(); } }
   else if (t.dataset.ab) { const [cid, i] = t.dataset.ab.split(":"), c = a.cats.find((x) => x.id === cid); if (c) { c.blurbs[+i] = t.value; save(); } }
 });
 $("#board").addEventListener("click", (e) => {
-  const a = state.awards, b = e.target.closest("[data-aact],[data-aclear]"); if (!b) return;
+  const a = curAwards(), b = e.target.closest("[data-aact],[data-aclear]"); if (!b) return;
   e.stopPropagation();
   if (b.dataset.aclear) { const [cid, i] = b.dataset.aclear.split(":"), c = a.cats.find((x) => x.id === cid); if (c) c.slots[+i] = null; }
   else {
@@ -941,19 +984,20 @@ $("#board").addEventListener("click", (e) => {
 // the bar: type your own, pick from the list, add a pack, choose columns
 $("#awAdd").onclick = () => { if (addAward($("#awNew").value)) { $("#awNew").value = ""; save(); render(); } else toast("Type an award name first", "error"); };
 $("#awNew").onkeydown = (e) => e.key === "Enter" && $("#awAdd").click();
-$("#awCols").onchange = (e) => { state.awards.cols = +e.target.value; save(); render(); };
+$("#awCols").onchange = (e) => { curAwards().cols = +e.target.value; save(); render(); };
 function fillPackMenu() {
-  const packs = AWARD_PACKS[state.kind === "games" ? "games" : "characters"];
+  const packs = { ...AWARD_PACKS[state.kind === "games" ? "games" : "characters"] };
+  if (!state.awards.scope) delete packs["This game"];
   $("#awPack").innerHTML = `<option value="">Add a pack…</option>` + Object.keys(packs).map((k) => `<option value="${esc(k)}">${esc(k)} (${packs[k].length})</option>`).join("");
 }
 $("#awPack").onchange = (e) => {
   const list = AWARD_PACKS[state.kind === "games" ? "games" : "characters"][e.target.value]; e.target.value = ""; if (!list) return;
-  const have = new Set(state.awards.cats.map((c) => c.title.toLowerCase()));
+  const have = new Set(curAwards().cats.map((c) => c.title.toLowerCase()));
   let n = 0; for (const t of list) if (!have.has(t.toLowerCase()) && addAward(t)) n++;
   save(); render(); toast(n ? `Added ${n} awards` : "Those awards are already here");
 };
 $("#awPick").onclick = () => {
-  const have = new Set(state.awards.cats.map((c) => c.title.toLowerCase()));
+  const have = new Set(curAwards().cats.map((c) => c.title.toLowerCase()));
   $("#awList").innerHTML = awardLib().map(([group, list]) => `<fieldset><legend>${esc(group)}</legend>${list.map(([t, auto]) =>
     `<label class="inline"><input type="checkbox" data-t="${esc(t)}" ${have.has(t.toLowerCase()) ? "checked disabled" : ""}> ${esc(t)}${auto ? ' <small class="muted" title="Can be nominated from your ratings">★ auto</small>' : ""}</label>`).join("")}</fieldset>`).join("");
   $("#awFilter").value = ""; openDlg("#awardDlg");
@@ -968,13 +1012,49 @@ $("#awAddSel").onclick = () => {
   $("#awardDlg").close(); save(); render(); if (picks.length) toast(`Added ${picks.length} award${picks.length === 1 ? "" : "s"}`);
 };
 
+
+// per-game awards: pick a game and the pool, podiums and export are about that game only
+function awardGames() {
+  const m = new Map();
+  for (const k of state.order) { const it = state.items[k]; if (it && it.kind !== "game") for (const g of gamesOf(it)) m.set(g, (m.get(g) || 0) + 1); }
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+let scopeSig = "";
+function fillScopeBar() {
+  const row = $("#awScopeRow"); row.hidden = state.kind === "games"; if (row.hidden) return;
+  const inGame = !!state.awards.scope;
+  $$("#awKind button").forEach((b) => b.setAttribute("aria-pressed", String((b.dataset.k === "game") === inGame)));
+  $("#awGamePick").hidden = !inGame;
+  const games = awardGames(), sig = games.map(([g, n]) => g + n + (state.awards.byGame[g]?.cats.some((c) => c.slots.some(Boolean)) ? "*" : "")).join("|") + "#" + state.awards.scope;
+  if (sig !== scopeSig) {
+    scopeSig = sig;
+    $("#awScope").innerHTML = games.map(([g, n]) =>
+      `<option value="${esc(g)}">${esc(g)} (${n})${state.awards.byGame[g]?.cats.some((c) => c.slots.some(Boolean)) ? " ✓" : ""}</option>`).join("");
+  }
+  $("#awScope").value = state.awards.scope;
+}
+function setScope(g) {
+  state.awards.scope = g; if (g) state.awards.last = g;
+  if (g && !curAwards().cats.length) { AWARD_PACKS.characters["This game"].forEach((t) => addAward(t)); toast(`Started ${g} awards`); }
+  save(); render(); if (g) resolveGameCover(g);
+}
+$("#awKind").onclick = (e) => {
+  const b = e.target.closest("[data-k]"); if (!b) return;
+  if (b.dataset.k === "chars") return setScope("");
+  const names = awardGames().map((x) => x[0]); if (!names.length) return toast("Import some characters first", "error");
+  setScope(names.includes(state.awards.last) ? state.awards.last : names[0]);
+};
+$("#awScope").onchange = (e) => setScope(e.target.value);
+const stepScope = (d) => { const names = awardGames().map((x) => x[0]); if (!names.length || !state.awards.scope) return; const i = names.indexOf(state.awards.scope); setScope(names[i < 0 ? 0 : (i + d + names.length) % names.length]); };
+$("#awPrev").onclick = () => stepScope(-1); $("#awNext").onclick = () => stepScope(1);
+
 // Auto-nominate: the top three by your rating for awards that have a matching rating (looks, voice, personality, writing, overall)
 function autoAwards() {
   const metric = { looks: (it) => (it.sub || [])[0] || 0, story: (it) => (it.sub || [])[1] || 0, personality: (it) => (it.sub || [])[2] || 0, voice: (it) => (it.sub || [])[3] || 0, rating: (it) => it.rating || 0 };
   let filled = 0;
-  for (const c of state.awards.cats) {
+  for (const c of curAwards().cats) {
     const f = metric[c.auto]; if (!f) continue;
-    const ranked = state.order.filter((k) => visible(k) && f(state.items[k]) > 0)
+    const ranked = state.order.filter((k) => visible(k) && inScope(k) && f(state.items[k]) > 0)
       .sort((a, b) => f(state.items[b]) - f(state.items[a]) || (state.items[b].rating || 0) - (state.items[a].rating || 0));
     if (!ranked.length) continue;
     c.slots = [ranked[0] || null, ranked[1] || null, ranked[2] || null]; filled++;
@@ -993,8 +1073,8 @@ function openCardMenu(key, x, y) {
     const cur = state.tiers.find((t) => t.keys.includes(key));
     state.tiers.forEach((t) => opts.push({ html: `<i style="background:${esc(t.color)}"></i>${esc(t.name)}${cur === t ? " ✓" : ""}`, run: () => moveKey(key, t.id) }));
   } else if (state.mode === "awards") {
-    if (!state.awards.cats.length) opts.push({ html: "<i>Add some awards first</i>", run: () => {} });
-    state.awards.cats.forEach((c) => opts.push({ row: true, label: c.title || "Untitled",
+    if (!curAwards().cats.length) opts.push({ html: "<i>Add some awards first</i>", run: () => {} });
+    curAwards().cats.forEach((c) => opts.push({ row: true, label: c.title || "Untitled",
       runs: [0, 1, 2].map((i) => ({ txt: ["1st", "2nd", "3rd"][i], on: c.slots[i] === key, run: () => moveKey(key, "award", null, c.id + ":" + i) })) }));
   } else if (state.mode === "venn") {
     const v = state.venn, g = vennGeom(v), cur = Object.entries(v.regions).find(([, a]) => a.includes(key))?.[0];
@@ -1009,8 +1089,8 @@ function openCardMenu(key, x, y) {
       .forEach(([n, lab, px, py]) => opts.push({ html: `${esc(n)}${lab ? ` <small>${esc(lab)}</small>` : ""}`, run: () => moveKey(key, "axis", null, { x: px + j(), y: py + j() }) }));
   }
   opts.push({ sep: true });
-  if (state.mode === "awards" ? awardKeys().has(key) : placed().has(key)) opts.push({ html: state.mode === "awards" ? "↩ Take off every podium" : "↩ Back to the pool", run: () => {
-    if (state.mode === "awards") { state.awards.cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s)))); save(); render(); } else moveKey(key, ""); } });
+  if (state.mode === "awards" ? curAwards().cats.some((c) => c.slots.includes(key)) : placed().has(key)) opts.push({ html: state.mode === "awards" ? "↩ Take off every podium here" : "↩ Back to the pool", run: () => {
+    if (state.mode === "awards") { curAwards().cats.forEach((c) => (c.slots = c.slots.map((s) => (s === key ? null : s)))); save(); render(); } else moveKey(key, ""); } });
   if (it.kind !== "game") opts.push({ html: isHeroine(it) ? "♀ Unmark as heroine" : "♀ Mark as heroine", run: () => { it.heroine = !isHeroine(it); save(); render(); } });
   opts.push({ html: it.kind === "game" ? "✕ Remove game" : "✕ Remove character", danger: true, run: () => removeItem(key) });
   const m = document.createElement("div"); m.id = "cardMenu"; m.className = "card-menu";

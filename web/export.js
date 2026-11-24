@@ -200,7 +200,7 @@ async function renderImage(canvas, o) { return state.mode === "venn" ? renderVen
 async function renderAwardsImage(canvas, o) {
   const T = EXPORT_STYLES[o.style] || EXPORT_STYLES.pastel, { fixed, W, fh, k } = frameOf(o);
   await loadFonts();
-  const A = state.awards, dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style), namesN = +o.names;
+  const A = curAwards(), dark = ["noir", "neon", "midnight", "arcade", "classic"].includes(o.style), namesN = +o.names;
   let cats = A.cats.map((c) => ({ ...c, items: c.slots.map((s) => (s && visible(s) ? { key: s, ...state.items[s] } : null)) }));
   if (o.hideEmpty) cats = cats.filter((c) => c.items.some(Boolean));
   const medal = ["#d9ad45", "#aeb6c1", "#c0804f"], ratio = state.kind === "games" ? 1.42 : 1.25;
@@ -228,11 +228,15 @@ async function renderAwardsImage(canvas, o) {
     for (let i = 0; i < cats.length; i += cols) { const row = cats.slice(i, i + cols).map((c) => ({ c, M: measure(c, cw) })); rows.push({ row, h: Math.max(...row.map((r) => r.M.h)) }); }
     return { cols, cw, rows, H: rows.reduce((s, r) => s + r.h, 0) + gap * Math.max(0, rows.length - 1) };
   };
-  let sc = 1, L = layout(W - pad * 2), H;
+  // a game's awards: its cover stands to the side of the award cards
+  const scoped = A !== state.awards && state.awards.scope, coverImg = scoped && A.cover?.img ? await loadImg(A.cover.imgHi || A.cover.img) : null, coverAR = coverImg ? coverImg.height / coverImg.width : 1.42;
+  const geom = (Wc) => { const cvW = coverImg ? Math.round(Wc * 0.22) : 0, off = coverImg ? cvW + gap : 0, Lx = layout(Wc - off); return { L: Lx, cvW, off, H: Math.max(Lx.H, cvW * coverAR) }; };
+  let sc = 1, G = geom(W - pad * 2), H;
   if (fixed) {
     H = fh;
-    for (; sc > 0.3; sc -= 0.04) { L = layout((W - pad * 2) / sc); if (m.top + L.H * sc + bottom <= fh) break; }
-  } else H = Math.round(m.top + L.H + bottom);
+    for (; sc > 0.3; sc -= 0.04) { G = geom((W - pad * 2) / sc); if (m.top + G.H * sc + bottom <= fh) break; }
+  } else H = Math.round(m.top + G.H + bottom);
+  const L = G.L;
   const pxScale = Math.min(+o.scale || 1, Math.sqrt(90e6 / (W * H)), 16000 / H, 16000 / W);
   canvas.width = Math.round(W * pxScale); canvas.height = Math.round(H * pxScale);
   const c = canvas.getContext("2d"); c.setTransform(pxScale, 0, 0, pxScale, 0, 0);
@@ -247,10 +251,16 @@ async function renderAwardsImage(canvas, o) {
     drawFooter(c, T, o, W, H, k, m); return { w: W, h: H, px: [canvas.width, canvas.height], cards: 0, card: 0, missing: 0 };
   }
   c.save(); c.translate(pad, m.top); c.scale(sc, sc);
+  if (coverImg) {
+    const cw0 = G.cvW, ch0 = cw0 * coverAR, r0 = Math.max(4, T.cardRadius * k + 4);
+    c.save(); c.shadowColor = "rgba(0,0,0,.45)"; c.shadowBlur = 16; c.shadowOffsetY = 5; c.fillStyle = "#000"; rr(c, 0, 0, cw0, ch0, r0); c.fill(); c.restore();
+    c.save(); rr(c, 0, 0, cw0, ch0, r0); c.clip(); c.drawImage(coverImg, 0, 0, cw0, ch0); c.restore();
+    c.save(); c.strokeStyle = medal[0]; c.lineWidth = 4; rr(c, 0, 0, cw0, ch0, r0); c.stroke(); c.restore();
+  }
   let y = 0;
   for (const { row, h } of L.rows) {
     row.forEach(({ c: cat, M }, ci) => {
-      const x = ci * (L.cw + gap), u = M.u;
+      const x = G.off + ci * (L.cw + gap), u = M.u;
       // panel
       c.save();
       if (T.rowShadow) { c.shadowColor = T.rowShadow; c.shadowBlur = 18 * u; c.shadowOffsetY = 6 * u; }
@@ -276,7 +286,7 @@ async function renderAwardsImage(canvas, o) {
           if (namesN) {
             c.textAlign = "center"; c.textBaseline = "alphabetic"; c.fillStyle = T.names; c.font = `600 ${Math.round(M.nameFs)}px ${T.mono ? T.labelFont : SANS}`;
             const lines = wrapLines(c, it.label, M.pcw + 14 * u, 2); lines.forEach((l, li) => c.fillText(l, cx, cy + M.pch + M.nameFs * 1.1 + li * M.nameFs * 1.25 + 3 * u));
-            if (namesN === 2 && it.game) { c.save(); c.globalAlpha = 0.75; c.fillStyle = T.sub; c.font = `400 ${Math.round(M.nameFs * 0.8)}px ${T.mono ? T.labelFont : SANS}`; c.fillText(fit(c, it.game, M.slotW), cx, cy + M.pch + M.nameFs * 1.1 + lines.length * M.nameFs * 1.25 + 3 * u); c.restore(); }
+            if (namesN === 2 && it.game && !scoped) { c.save(); c.globalAlpha = 0.75; c.fillStyle = T.sub; c.font = `400 ${Math.round(M.nameFs * 0.8)}px ${T.mono ? T.labelFont : SANS}`; c.fillText(fit(c, it.game, M.slotW), cx, cy + M.pch + M.nameFs * 1.1 + lines.length * M.nameFs * 1.25 + 3 * u); c.restore(); }
           }
         } else {
           c.save(); c.setLineDash([6 * u, 5 * u]); c.strokeStyle = T.sub; c.globalAlpha = 0.4; c.lineWidth = Math.max(1, 2 * u); rr(c, cx - M.pcw / 2, cy, M.pcw, M.pch, T.cardRadius * k); c.stroke(); c.restore();
@@ -573,7 +583,7 @@ function openTierExport() {
   const dlg = $("#exportDlg");
   let saved = {}; try { saved = JSON.parse(localStorage.getItem(EXPORT_KEY)) || {}; } catch (e) { /* ignore */ }
   const o = { style: "pastel", title: state.name, subtitle: "", footer: "", size: "auto:1600", card: "100", names: "1", hideEmpty: true, pool: false, scale: "1", fmt: "png", titleScale: 100, subScale: 100, headGap: 100, ...saved };
-  o.title = state.name;
+  o.title = state.mode === "awards" && state.awards.scope ? `${state.awards.scope.toUpperCase()} AWARDS` : state.name;
   if (!EXPORT_STYLES[o.style]) o.style = "pastel";
   $("#exStyles").innerHTML = Object.entries(EXPORT_STYLES).map(([id, s]) =>
     `<button type="button" class="ex-style" data-style="${id}" aria-pressed="${o.style === id}"><span class="sw">${s.swatch.map((x) => `<i style="background:${x}"></i>`).join("")}</span><b>${esc(s.name)}</b><small>${esc(s.blurb)}</small></button>`).join("");
