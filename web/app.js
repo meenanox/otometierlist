@@ -201,10 +201,21 @@ function render() {
   if (sort === "name") keys.sort((a, b) => state.items[a].label.localeCompare(state.items[b].label));
   else if (sort === "game") keys.sort((a, b) => (state.items[a].game || "").localeCompare(state.items[b].game || "") || state.items[a].label.localeCompare(state.items[b].label));
   else if (sort === "rating") keys.sort((a, b) => (state.items[b].rating || 0) - (state.items[a].rating || 0));
-  $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
+  // how many are flagged, so the filter never fails silently
+  const allKeys = state.order.filter((k) => state.items[k]);
+  const nHero = allKeys.filter((k) => isHeroine(state.items[k])).length, nManual = allKeys.filter((k) => state.items[k].heroine !== undefined).length;
+  const hiddenByFilter = state.order.filter((k) => !inBoard.has(k) && state.items[k] && !heroOk(state.items[k])).length;
+  let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
+  if (!all && hiddenByFilter) {
+    empty = `<div class="muted empty"><p>The <b>Heroines: ${state.ui.heroines}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${state.ui.heroines === "only" && !nHero ? " None of your characters are flagged as heroines." : ""}</p>
+      <p class="row"><button class="ghost" data-hero="show">Show everyone</button>${nManual ? `<button class="ghost" data-hero="clear" title="Forget hand-made Mark / Unmark choices and use the imported roles again">Clear ${nManual} hand-made mark${nManual === 1 ? "" : "s"}</button>` : ""}</p>
+      ${state.ui.heroines === "only" && !nHero ? `<p>Heroines are tagged when you import. Re-import with <b>Who to add</b> set to a choice that includes heroines, or double-click a card and choose <b>Mark as heroine</b>.</p>` : ""}</div>`;
+  }
+  $("#pool").innerHTML = keys.map((k) => cardHtml(k)).join("") || empty;
   $("#poolCount").textContent = all ? `${all} unranked` : "";
   if (document.activeElement !== $("#listName")) $("#listName").value = state.name;
   $("#heroFilter").value = state.ui.heroines;
+  const hf = $("#heroFilter").options; hf[0].textContent = `Heroines: show (${allKeys.length})`; hf[1].textContent = `Heroines: hide (${allKeys.length - nHero})`; hf[2].textContent = `Heroines: only (${nHero})`;
 }
 
 /** dest: a tier id (tier mode) or a Venn region key like "01" (venn mode); "" returns the card to the pool. */
@@ -779,6 +790,13 @@ $("#fileIn").onchange = async (e) => {
 };
 $("#btnExport").onclick = () => openTierExport();
 $("#heroFilter").onchange = (e) => { state.ui.heroines = e.target.value; save(); render(); };
+$("#pool").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-hero]"); if (!b) return;
+  selected = null; e.stopPropagation();
+  if (b.dataset.hero === "show") state.ui.heroines = "show";
+  else Object.values(state.items).forEach((it) => { delete it.heroine; });
+  save(); render();
+});
 // ---------- double-click a card to pick where it goes ----------
 let lastClick = { key: "", t: 0 };
 function closeCardMenu() { $("#cardMenu")?.remove(); }
