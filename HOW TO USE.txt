@@ -14,7 +14,7 @@ VNDB games, then save them as pictures.
    Keep the black window open while you use it. Close it to stop.
 
 3. USE IT
-   - Click "Import characters". Type your KoiLog username (for example keitopan)
+   - Click "Import". Type your KoiLog username (for example keitopan)
      or paste a VNDB id like v17, or search by name.
    - Drag characters onto the ranks. Switch between Tier list, Venn diagram and
      Axis chart at the top.

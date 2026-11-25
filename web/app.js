@@ -309,7 +309,7 @@ function renderPool() {
   }
   const nHero = counts.only;
   const hiddenByFilter = state.order.filter((k) => !inBoard.has(k) && state.items[k] && !heroOk(state.items[k])).length;
-  let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import characters</b>."}</p>`;
+  let empty = `<p class="muted empty">${all ? "No match." : "Nothing here yet. Use <b>Import</b>."}</p>`;
   if (!all && hiddenByFilter) {
     const mode = state.ui.heroines, byRole = ["only", "li", "heroli", "side"].includes(mode), noHero = mode === "only" && !nHero;
     empty = `<div class="muted empty"><p>The <b>${HERO_FILTERS[mode] || mode}</b> filter is hiding ${hiddenByFilter} character${hiddenByFilter === 1 ? "" : "s"}.${noHero ? " None of your characters are flagged as heroines." : mode === "side" && !counts.side ? " You haven't imported any side characters yet: set Who to add to Everyone when importing, or use Add side characters on a game's awards page." : byRole && nRoleless ? ` ${nRoleless} of your characters have no role saved yet.` : ""}</p>
@@ -416,13 +416,18 @@ function removeItem(key) {
 }
 
 // ---------- adding items ----------
+// Imports work the same from either side: characters land in the Characters list and games in the Games list.
+const listFor = (kind) => (state.kind === kind ? state : (state.other ||= freshList(kind)));
+const importCount = { chars: 0, games: 0 };
 function addItems(list) {
   let n = 0;
   for (const it of list) {
     if (!it.key || !it.label) continue;
-    if (!state.items[it.key]) { state.order.push(it.key); n++; }
-    const prev = state.items[it.key], gs = new Set([...(prev?.games || (prev?.game ? [prev.game] : [])), ...(it.games || (it.game ? [it.game] : []))]);
-    state.items[it.key] = { ...prev, ...it, ...(gs.size ? { games: [...gs] } : {}) };
+    const game = it.kind === "game", L = listFor(game ? "games" : "characters");
+    if (!L.items[it.key]) { L.order.push(it.key); n++; importCount[game ? "games" : "chars"]++; }
+    const prev = L.items[it.key], gs = new Set([...(prev?.games || (prev?.game ? [prev.game] : [])), ...(it.games || (it.game ? [it.game] : []))]);
+    L.items[it.key] = { ...prev, ...it, ...(gs.size && !game ? { games: [...gs] } : {}) };
+    if (game && prev?.img && !it.img) L.items[it.key].img = prev.img;
   }
   save(); renderSoon(); return n;
 }
@@ -433,14 +438,14 @@ const seenGames = new Map();
 const noteGame = (it) => { if (it && it.key && it.label && !seenGames.has(it.key)) seenGames.set(it.key, it); };
 function flushSeenGames() {
   const found = [...seenGames.values()]; seenGames.clear();
-  if (!found.length || state.kind !== "characters") return 0;
-  const g = state.other || (state.other = freshList("games")); let n = 0;
+  if (!found.length) return 0;
+  const g = listFor("games"); let n = 0;
   for (const it of found) {
     const have = g.items[it.key];
     if (have) { if (!have.img && it.img) { have.img = it.img; have.imgHi = it.imgHi; } continue; }   // already there (maybe with your vote or rank): only fill in a missing cover
-    g.order.push(it.key); g.items[it.key] = it; n++;
+    g.order.push(it.key); g.items[it.key] = it; n++; importCount.games++;
   }
-  save(); return n;
+  save(); renderSoon(); return n;
 }
 
 // ---------- KoiLog ----------
@@ -589,24 +594,22 @@ function setStatus(frac, msg) {
   $("#impStatus").hidden = false; $("#impBar").style.width = Math.round(frac * 100) + "%"; $("#impMsg").textContent = msg;
 }
 async function runImport(btn, job) {
-  if (importing) return; importing = true; btn.disabled = true; seenGames.clear();
+  if (importing) return; importing = true; btn.disabled = true; seenGames.clear(); importCount.chars = importCount.games = 0;
   try {
-    const r = await job(), gamesAdded = flushSeenGames();
+    await job(); flushSeenGames();
+    const { chars, games } = importCount, msg = [chars ? `${chars} new character${chars === 1 ? "" : "s"}` : "", games ? `${games} new game${games === 1 ? "" : "s"}` : ""].filter(Boolean).join(" and ") || "nothing new";
     $("#impStatus").hidden = false; $("#impBar").style.width = "100%";
-    const noun = state.kind === "games" ? "game" : "character";
-    $("#impMsg").textContent = state.kind === "games" ? `Done: ${r.added} new game${r.added === 1 ? "" : "s"} added.` : `Done: ${r.added} new character${r.added === 1 ? "" : "s"} from ${r.games} game${r.games === 1 ? "" : "s"}.` + (gamesAdded ? ` ${gamesAdded} new game${gamesAdded === 1 ? "" : "s"} also added to your Games list.` : "");
-    toast(`Added ${r.added} ${noun}${r.added === 1 ? "" : "s"}` + (gamesAdded ? ` and ${gamesAdded} game${gamesAdded === 1 ? "" : "s"}` : ""));
+    $("#impMsg").textContent = `Done: ${msg} added.`; toast(`Added ${msg}`);
   } catch (err) { $("#impStatus").hidden = false; $("#impMsg").textContent = "⚠ " + err.message; toast(err.message, "error"); }
   finally { importing = false; btn.disabled = false; seenGames.clear(); }
 }
 
 function syncImportTabs() {
   const tabs = $$(".tabs [data-tab]");
-  tabs.forEach((b) => (b.hidden = b.dataset.kind !== state.kind));
   const cur = tabs.find((b) => b.getAttribute("aria-pressed") === "true" && !b.hidden) || tabs.find((b) => !b.hidden);
   tabs.forEach((b) => b.setAttribute("aria-pressed", String(b === cur)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== cur.dataset.tab));
-  $("#impOpts").hidden = state.kind === "games"; $("#impStatus").hidden = true;
+  $("#impStatus").hidden = true;
 }
 $("#btnImport").onclick = () => { syncImportTabs(); openDlg("#importDlg"); };
 $("#kindSeg").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b) switchKind(b.dataset.kind); };

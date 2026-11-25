@@ -16,7 +16,7 @@
     <input id="listName" value="My character tier list" aria-label="List name">
     <span class="seg" id="kindSeg" title="Two separate lists"><button data-kind="characters" aria-pressed="true">Characters</button><button data-kind="games" aria-pressed="false">Games</button></span>
     <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button><button data-mode="spectrum" aria-pressed="false" title="Rate routes along a line, e.g. Fluff to Serious">Spectrum</button><button data-mode="radar" aria-pressed="false" title="Compare routes across all your scales">Radar</button><button data-mode="align" aria-pressed="false" title="A 3×3 alignment grid from two scales">Alignment</button></span>
-    <button id="btnImport" class="primary">Import characters</button>
+    <button id="btnImport" class="primary">Import</button>
     <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
     <button id="btnTiers" class="ghost">Edit ranks</button>
     <button id="btnLayout" class="ghost">Layout</button>
@@ -59,13 +59,13 @@
 </main>
 
 <dialog id="importDlg" class="sheet">
-  <header class="sheet-head"><h2>Import characters</h2><button class="icon" data-close aria-label="Close">✕</button></header>
+  <header class="sheet-head"><h2>Import</h2><button class="icon" data-close aria-label="Close">✕</button></header>
   <nav class="tabs">
     <button data-tab="koilog" data-kind="characters" aria-pressed="true">KoiLog user</button>
     <button data-tab="vndb" data-kind="characters">VNDB</button>
     <button data-tab="name" data-kind="characters">Search by name</button>
-    <button data-tab="gvndb" data-kind="games" aria-pressed="false" hidden>VNDB list or ids</button>
-    <button data-tab="gname" data-kind="games" hidden>Search games</button>
+    <button data-tab="gvndb" data-kind="games" aria-pressed="false">VNDB games list</button>
+    <button data-tab="gname" data-kind="games">Search games</button>
   </nav>
   <div class="sheet-body">
     <div data-pane="koilog">
