@@ -619,9 +619,9 @@ $$(".tabs [data-tab]").forEach((b) => (b.onclick = () => {
 }));
 $("#impSide").onchange = (e) => ($("#impWho").value = e.target.checked ? "all" : "love+heroine");
 $("#klGo").onclick = (e) => runImport(e.target, () => importKoilogUser($("#klUser").value, $("#klPlayed").checked, $("#klRank").checked, $("#impWho").value, setStatus));
-$("#klUser").onkeydown = (e) => e.key === "Enter" && $("#klGo").click();
+$("#klUser").onkeydown = (e) => { if (e.key === "Enter") $("#klGo").click(); };
 $("#vnGo").onclick = (e) => runImport(e.target, () => importVndb($("#vnIn").value, $("#impWho").value, setStatus));
-$("#vnIn").onkeydown = (e) => e.key === "Enter" && $("#vnGo").click();
+$("#vnIn").onkeydown = (e) => { if (e.key === "Enter") $("#vnGo").click(); };
 $("#nmGo").onclick = async () => {
   const q = $("#nmIn").value.trim(); if (q.length < 2) return;
   $("#nmRes").innerHTML = `<p class="muted">Searching…</p>`;
@@ -641,7 +641,7 @@ $("#nmGo").onclick = async () => {
     });
   };
 };
-$("#nmIn").onkeydown = (e) => e.key === "Enter" && $("#nmGo").click();
+$("#nmIn").onkeydown = (e) => { if (e.key === "Enter") $("#nmGo").click(); };
 
 // ---------- game tier list: VNDB covers ----------
 const GAME_FIELDS = "id,title,alttitle,released,image.url,image.thumbnail";
@@ -679,7 +679,7 @@ async function importVndbGames(input, which, progress) {
   return { added, games: list.length };
 }
 $("#gvGo").onclick = (e) => runImport(e.target, () => importVndbGames($("#gvIn").value, $("#gvList").value, setStatus));
-$("#gvIn").onkeydown = (e) => e.key === "Enter" && $("#gvGo").click();
+$("#gvIn").onkeydown = (e) => { if (e.key === "Enter") $("#gvGo").click(); };
 $("#gnGo").onclick = async () => {
   const q = $("#gnIn").value.trim(); if (q.length < 2) return;
   $("#gnRes").innerHTML = `<p class="muted">Searching…</p>`;
@@ -693,7 +693,7 @@ $("#gnGo").onclick = async () => {
     runImport(b, async () => ({ added: addItems(pick.map((v) => gameItem(v))), games: pick.length }));
   };
 };
-$("#gnIn").onkeydown = (e) => e.key === "Enter" && $("#gnGo").click();
+$("#gnIn").onkeydown = (e) => { if (e.key === "Enter") $("#gnGo").click(); };
 
 
 // ---------- rank editor ----------
@@ -1173,7 +1173,7 @@ $("#board").addEventListener("click", (e) => {
 
 // the bar: type your own, pick from the list, add a pack, choose columns
 $("#awAdd").onclick = () => { if (addAward($("#awNew").value)) { $("#awNew").value = ""; save(); render(); } else toast("Type an award name first", "error"); };
-$("#awNew").onkeydown = (e) => e.key === "Enter" && $("#awAdd").click();
+$("#awNew").onkeydown = (e) => { if (e.key === "Enter") $("#awAdd").click(); };
 $("#awCols").onchange = (e) => { curAwards().cols = +e.target.value; save(); render(); };
 function fillPackMenu() {
   const packs = { ...AWARD_PACKS[state.kind === "games" ? "games" : "characters"] };
