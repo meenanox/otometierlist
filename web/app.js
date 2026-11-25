@@ -428,6 +428,7 @@ function addItems(list) {
 }
 
 // Games seen while importing characters: they are added to the Games list too.
+const klCover = (g) => { const c = g?.coverImageUrls; return { img: c?.thumbnail || c?.original || "", imgHi: c?.original || c?.thumbnail || "" }; };
 const seenGames = new Map();
 const noteGame = (it) => { if (it && it.key && it.label && !seenGames.has(it.key)) seenGames.set(it.key, it); };
 function flushSeenGames() {
@@ -435,7 +436,8 @@ function flushSeenGames() {
   if (!found.length || state.kind !== "characters") return 0;
   const g = state.other || (state.other = freshList("games")); let n = 0;
   for (const it of found) {
-    if (g.items[it.key]) continue;   // already there (maybe with your vote or rank): leave it alone
+    const have = g.items[it.key];
+    if (have) { if (!have.img && it.img) { have.img = it.img; have.imgHi = it.imgHi; } continue; }   // already there (maybe with your vote or rank): only fill in a missing cover
     g.order.push(it.key); g.items[it.key] = it; n++;
   }
   save(); return n;
@@ -484,7 +486,7 @@ async function importKoilogUser(input, onlyPlayed, withRatings, who, progress) {
   await mapPool(targets, 8, async (g) => {
     try {
       const [game, chars] = await Promise.all([kl("games/" + g.id), kl(`games/${g.id}/characters`)]);
-      noteGame({ key: "klg:" + game.id, kind: "game", label: gameTitle(game), alt: "", game: (game.releaseDate || game.released || "").slice(0, 4), img: "", imgHi: "", vote: 0, rating: 0 });
+      noteGame({ key: "klg:" + game.id, kind: "game", label: gameTitle(game), alt: "", game: (game.releaseDate || game.released || "").slice(0, 4), ...klCover(game), vote: 0, rating: 0 });
       const byId = Object.fromEntries(chars.map((c) => [c.id, c]));
       // KoiLog's route list also contains the heroine and "major" characters, so the role comes from the character list, not from having a route.
       const routeOf = Object.fromEntries((g.routeStatuses || []).map((rs) => [rs.characterId, rs]));
@@ -630,7 +632,7 @@ $("#nmGo").onclick = async () => {
     runImport(b, async () => {
       if (a.type === "vnchar") { const c = a.c; return { added: addItems([{ key: "vn:" + c.id, role: roleOf(c.vns?.[0]?.role), label: c.name, alt: c.original || "", game: c.vns?.[0]?.title || "", img: vndbImg(c), imgHi: vndbImg(c) }]), games: 1 }; }
       if (a.type === "vn") return { added: await vndbCharactersFor([a.id], $("#impWho").value, setStatus), games: 1 };
-      noteGame({ key: "klg:" + a.game.id, kind: "game", label: gameTitle(a.game), alt: "", game: "", img: "", imgHi: "", vote: 0, rating: 0 });
+      noteGame({ key: "klg:" + a.game.id, kind: "game", label: gameTitle(a.game), alt: "", game: "", ...klCover(a.game), vote: 0, rating: 0 });
       const chars = await kl(`games/${a.game.id}/characters`);
       return { added: addItems(chars.filter((c) => roleOk(roleOf(c.role), $("#impWho").value)).map((c) => klCharItem(c, a.game))), games: 1 };
     });
