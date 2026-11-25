@@ -1,6 +1,6 @@
 TIER LIST STUDIO
 ================
-Make character tier lists, Venn diagrams and axis charts from your KoiLog or
+Make character tier lists, Venn diagrams, axis charts, awards and scale charts from your KoiLog or
 VNDB games, then save them as pictures.
 
 1. INSTALL PYTHON (one time, free)

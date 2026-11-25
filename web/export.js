@@ -195,7 +195,7 @@ async function loadFonts() {
   try { await Promise.all(["600 40px 'Cormorant Garamond'", "700 20px Orbitron", "20px 'Press Start 2P'"].map((f) => document.fonts.load(f))); } catch (e) { /* system fonts */ }
 }
 
-async function renderImage(canvas, o) { return state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : state.mode === "awards" ? renderAwardsImage(canvas, o) : renderTierImage(canvas, o); }
+async function renderImage(canvas, o) { return state.mode === "spectrum" ? renderSpectrumImage(canvas, o) : state.mode === "radar" ? renderRadarImage(canvas, o) : state.mode === "align" ? renderAlignImage(canvas, o) : state.mode === "venn" ? renderVennImage(canvas, o) : state.mode === "axis" ? renderAxisImage(canvas, o) : state.mode === "awards" ? renderAwardsImage(canvas, o) : renderTierImage(canvas, o); }
 
 
 // ---- award finishes: flat | metal (gradient steps) | glow (+ halos) | gala (+ spotlight, sparkles, crown)
@@ -662,7 +662,7 @@ function openTierExport() {
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) { $(id).value = o[f]; $(id).nextElementSibling.textContent = o[f] + "%"; }
     $("#exHeroes").value = state.ui.heroines; $("#exHeroes").closest("label").hidden = state.kind === "games";
     $("#exFx").value = o.fx; $("#exFx").closest("label").hidden = state.mode !== "awards"; $("#exDesigns").hidden = state.mode !== "awards";
-    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards");
+    $("#exCard").disabled = state.mode === "axis" || isScalesMode() || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards");
     const noTier = state.mode !== "tier"; $("#exHide").closest("label").hidden = noTier && state.mode !== "awards"; $("#exPool").closest("label").hidden = noTier;
     $("#exHideT").textContent = state.mode === "awards" ? "Hide awards with no winners" : "Hide empty tiers";
   };
@@ -683,7 +683,7 @@ function openTierExport() {
       scale: $("#exScale").value, fmt: $("#exFmt").value, names: $("#exNames").value, hideEmpty: $("#exHide").checked, pool: $("#exPool").checked,
       titleScale: +$("#exTitleScale").value, subScale: +$("#exSubScale").value, headGap: +$("#exHeadGap").value, fx: $("#exFx").value });
     for (const [id, f] of [["#exTitleScale", "titleScale"], ["#exSubScale", "subScale"], ["#exHeadGap", "headGap"]]) $(id).nextElementSibling.textContent = o[f] + "%";
-    $("#exCard").disabled = state.mode === "axis" || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards"); soon();
+    $("#exCard").disabled = state.mode === "axis" || isScalesMode() || (o.size.startsWith("fix:") && state.mode !== "venn" && state.mode !== "awards"); soon();
   };
   $("#exStyles").onclick = (e) => { const b = e.target.closest("[data-style]"); if (!b) return; o.style = b.dataset.style; $$("[data-style]", dlg).forEach((x) => x.setAttribute("aria-pressed", String(x === b))); soon(); };
   const mime = () => ({ png: "image/png", jpeg: "image/jpeg", webp: "image/webp" }[o.fmt]);
