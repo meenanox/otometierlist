@@ -427,6 +427,20 @@ function addItems(list) {
   save(); renderSoon(); return n;
 }
 
+// Games seen while importing characters. When "Also add these games" is ticked they are added to the Games list too.
+const seenGames = new Map();
+const noteGame = (it) => { if (it && it.key && it.label && !seenGames.has(it.key)) seenGames.set(it.key, it); };
+function flushSeenGames() {
+  const found = [...seenGames.values()]; seenGames.clear();
+  if (!found.length || state.kind !== "characters" || !$("#impAlsoGames").checked) return 0;
+  const g = state.other || (state.other = freshList("games")); let n = 0;
+  for (const it of found) {
+    if (g.items[it.key]) continue;   // already there (maybe with your vote or rank): leave it alone
+    g.order.push(it.key); g.items[it.key] = it; n++;
+  }
+  save(); return n;
+}
+
 // ---------- KoiLog ----------
 async function kl(path) {
   for (let attempt = 0; ; attempt++) {
@@ -470,6 +484,7 @@ async function importKoilogUser(input, onlyPlayed, withRatings, who, progress) {
   await mapPool(targets, 8, async (g) => {
     try {
       const [game, chars] = await Promise.all([kl("games/" + g.id), kl(`games/${g.id}/characters`)]);
+      noteGame({ key: "klg:" + game.id, kind: "game", label: gameTitle(game), alt: "", game: (game.releaseDate || game.released || "").slice(0, 4), img: "", imgHi: "", vote: 0, rating: 0 });
       const byId = Object.fromEntries(chars.map((c) => [c.id, c]));
       // KoiLog's route list also contains the heroine and "major" characters, so the role comes from the character list, not from having a route.
       const routeOf = Object.fromEntries((g.routeStatuses || []).map((rs) => [rs.characterId, rs]));
@@ -512,7 +527,7 @@ async function vndbCharactersFor(vnIds, who, progress) {
   const titles = {};
   for (let i = 0; i < vnIds.length; i += 50) {
     const part = vnIds.slice(i, i + 50);
-    for (const v of await vndbAll("vn", { filters: ["or", ...part.map((id) => ["id", "=", id])], fields: "id,title" })) titles[v.id] = v.title;
+    for (const v of await vndbAll("vn", { filters: ["or", ...part.map((id) => ["id", "=", id])], fields: GAME_FIELDS })) { titles[v.id] = v.title; noteGame(gameItem(v)); }
   }
   let added = 0;
   for (let i = 0; i < vnIds.length; i += 15) {
@@ -572,15 +587,15 @@ function setStatus(frac, msg) {
   $("#impStatus").hidden = false; $("#impBar").style.width = Math.round(frac * 100) + "%"; $("#impMsg").textContent = msg;
 }
 async function runImport(btn, job) {
-  if (importing) return; importing = true; btn.disabled = true;
+  if (importing) return; importing = true; btn.disabled = true; seenGames.clear();
   try {
-    const r = await job();
+    const r = await job(), gamesAdded = flushSeenGames();
     $("#impStatus").hidden = false; $("#impBar").style.width = "100%";
     const noun = state.kind === "games" ? "game" : "character";
-    $("#impMsg").textContent = state.kind === "games" ? `Done: ${r.added} new game${r.added === 1 ? "" : "s"} added.` : `Done: ${r.added} new character${r.added === 1 ? "" : "s"} from ${r.games} game${r.games === 1 ? "" : "s"}.`;
-    toast(`Added ${r.added} ${noun}${r.added === 1 ? "" : "s"}`);
+    $("#impMsg").textContent = state.kind === "games" ? `Done: ${r.added} new game${r.added === 1 ? "" : "s"} added.` : `Done: ${r.added} new character${r.added === 1 ? "" : "s"} from ${r.games} game${r.games === 1 ? "" : "s"}.` + (gamesAdded ? ` ${gamesAdded} new game${gamesAdded === 1 ? "" : "s"} also added to your Games list.` : "");
+    toast(`Added ${r.added} ${noun}${r.added === 1 ? "" : "s"}` + (gamesAdded ? ` and ${gamesAdded} game${gamesAdded === 1 ? "" : "s"}` : ""));
   } catch (err) { $("#impStatus").hidden = false; $("#impMsg").textContent = "⚠ " + err.message; toast(err.message, "error"); }
-  finally { importing = false; btn.disabled = false; }
+  finally { importing = false; btn.disabled = false; seenGames.clear(); }
 }
 
 function syncImportTabs() {
@@ -589,7 +604,7 @@ function syncImportTabs() {
   const cur = tabs.find((b) => b.getAttribute("aria-pressed") === "true" && !b.hidden) || tabs.find((b) => !b.hidden);
   tabs.forEach((b) => b.setAttribute("aria-pressed", String(b === cur)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== cur.dataset.tab));
-  $("label.who").hidden = state.kind === "games"; $("#impStatus").hidden = true;
+  $("label.who").hidden = state.kind === "games"; $("#impAlsoGames").hidden = state.kind === "games"; $("#impStatus").hidden = true;
 }
 $("#btnImport").onclick = () => { syncImportTabs(); openDlg("#importDlg"); };
 $("#kindSeg").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b) switchKind(b.dataset.kind); };
@@ -614,6 +629,7 @@ $("#nmGo").onclick = async () => {
     runImport(b, async () => {
       if (a.type === "vnchar") { const c = a.c; return { added: addItems([{ key: "vn:" + c.id, role: roleOf(c.vns?.[0]?.role), label: c.name, alt: c.original || "", game: c.vns?.[0]?.title || "", img: vndbImg(c), imgHi: vndbImg(c) }]), games: 1 }; }
       if (a.type === "vn") return { added: await vndbCharactersFor([a.id], $("#impWho").value, setStatus), games: 1 };
+      noteGame({ key: "klg:" + a.game.id, kind: "game", label: gameTitle(a.game), alt: "", game: "", img: "", imgHi: "", vote: 0, rating: 0 });
       const chars = await kl(`games/${a.game.id}/characters`);
       return { added: addItems(chars.filter((c) => roleOk(roleOf(c.role), $("#impWho").value)).map((c) => klCharItem(c, a.game))), games: 1 };
     });
