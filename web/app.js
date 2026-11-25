@@ -432,7 +432,7 @@ const seenGames = new Map();
 const noteGame = (it) => { if (it && it.key && it.label && !seenGames.has(it.key)) seenGames.set(it.key, it); };
 function flushSeenGames() {
   const found = [...seenGames.values()]; seenGames.clear();
-  if (!found.length || state.kind !== "characters" || !$("#impAlsoGames").checked) return 0;
+  if (!found.length || state.kind !== "characters" || !$("#impAlsoGames input").checked) return 0;
   const g = state.other || (state.other = freshList("games")); let n = 0;
   for (const it of found) {
     if (g.items[it.key]) continue;   // already there (maybe with your vote or rank): leave it alone
