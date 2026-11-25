@@ -427,12 +427,12 @@ function addItems(list) {
   save(); renderSoon(); return n;
 }
 
-// Games seen while importing characters. When "Also add these games" is ticked they are added to the Games list too.
+// Games seen while importing characters: they are added to the Games list too.
 const seenGames = new Map();
 const noteGame = (it) => { if (it && it.key && it.label && !seenGames.has(it.key)) seenGames.set(it.key, it); };
 function flushSeenGames() {
   const found = [...seenGames.values()]; seenGames.clear();
-  if (!found.length || state.kind !== "characters" || !$("#impAlsoGames input").checked) return 0;
+  if (!found.length || state.kind !== "characters") return 0;
   const g = state.other || (state.other = freshList("games")); let n = 0;
   for (const it of found) {
     if (g.items[it.key]) continue;   // already there (maybe with your vote or rank): leave it alone
@@ -604,7 +604,7 @@ function syncImportTabs() {
   const cur = tabs.find((b) => b.getAttribute("aria-pressed") === "true" && !b.hidden) || tabs.find((b) => !b.hidden);
   tabs.forEach((b) => b.setAttribute("aria-pressed", String(b === cur)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== cur.dataset.tab));
-  $("label.who").hidden = state.kind === "games"; $("#impAlsoGames").hidden = state.kind === "games"; $("#impStatus").hidden = true;
+  $("#impOpts").hidden = state.kind === "games"; $("#impStatus").hidden = true;
 }
 $("#btnImport").onclick = () => { syncImportTabs(); openDlg("#importDlg"); };
 $("#kindSeg").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b) switchKind(b.dataset.kind); };
@@ -612,6 +612,7 @@ $$(".tabs [data-tab]").forEach((b) => (b.onclick = () => {
   $$(".tabs [data-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
   $$("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
 }));
+$("#impSide").onchange = (e) => ($("#impWho").value = e.target.checked ? "all" : "love+heroine");
 $("#klGo").onclick = (e) => runImport(e.target, () => importKoilogUser($("#klUser").value, $("#klPlayed").checked, $("#klRank").checked, $("#impWho").value, setStatus));
 $("#klUser").onkeydown = (e) => e.key === "Enter" && $("#klGo").click();
 $("#vnGo").onclick = (e) => runImport(e.target, () => importVndb($("#vnIn").value, $("#impWho").value, setStatus));

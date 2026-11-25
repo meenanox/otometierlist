@@ -93,12 +93,11 @@
       <div class="row"><input id="nmIn" placeholder="game or character name"><button id="nmGo" class="primary">Search</button></div>
       <div id="nmRes" class="results"></div>
     </div>
-    <label class="who">Who to add <select id="impWho">
-      <option value="love+heroine" selected>Love interests + heroines</option>
-      <option value="love">Love interests only</option>
-      <option value="heroine">Heroines only</option>
-      <option value="all">Everyone (incl. side characters)</option></select></label>
-    <label class="who" id="impAlsoGames"><input type="checkbox" checked> Also add these games to my Games list</label>
+    <div id="impOpts" class="who-opts">
+      <p class="muted">Adds each character with their game: love interests and heroines, and the games go into your Games list too.</p>
+      <label class="inline"><input type="checkbox" id="impSide"> Also add side characters</label>
+      <input type="hidden" id="impWho" value="love+heroine">
+    </div>
     <div id="impStatus" class="status" hidden><div class="bar"><i id="impBar"></i></div><span id="impMsg"></span></div>
   </div>
 </dialog>
