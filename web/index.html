@@ -15,7 +15,7 @@
   <div class="top-actions">
     <input id="listName" value="My character tier list" aria-label="List name">
     <span class="seg" id="kindSeg" title="Two separate lists"><button data-kind="characters" aria-pressed="true">Characters</button><button data-kind="games" aria-pressed="false">Games</button></span>
-    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button><button data-mode="spectrum" aria-pressed="false" title="Rate routes along a line, e.g. Fluff to Serious">Spectrum</button><button data-mode="radar" aria-pressed="false" title="Compare routes across all your scales">Radar</button><button data-mode="align" aria-pressed="false" title="A 3×3 alignment grid from two scales">Alignment</button></span>
+    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button><button data-mode="spectrum" aria-pressed="false" title="Rate routes along a line, e.g. Fluff to Serious">Spectrum</button><button data-mode="radar" aria-pressed="false" title="Compare routes across all your scales">Radar</button><button data-mode="align" aria-pressed="false" title="A 3×3 alignment grid from two scales">Alignment</button><button data-mode="match" aria-pressed="false" title="Pick games, then choose between two characters at a time to sort them">Rank match</button></span>
     <button id="btnImport" class="primary">Import</button>
     <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
     <button id="btnTiers" class="ghost">Edit ranks</button>
@@ -188,6 +188,7 @@
 <div id="toast" class="toast" hidden></div>
 <script src="art.js"></script>
 <script src="scales.js"></script>
+<script src="match.js"></script>
 <script src="app.js"></script>
 <script src="export.js"></script>
 <script src="export-scales.js"></script>

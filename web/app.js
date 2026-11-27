@@ -40,7 +40,7 @@ function cleanAwardSet(aw) {
     id: c.id || newId(), title: c.title.slice(0, 60), auto: c.auto || "",
     slots: [0, 1, 2].map((i) => (c.slots && state.items[c.slots[i]] ? c.slots[i] : null)), blurbs: [0, 1, 2].map((i) => String(c.blurbs?.[i] || "").slice(0, 120)) })) };
 }
-const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null, awards: makeAwards(), scales: makeScales() };
+const state = { name: "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), ui: { ...DEFAULT_UI }, customPresets: {}, kind: "characters", other: null, awards: makeAwards(), scales: makeScales(), match: makeMatch() };
 let selected = null;
 
 // ---------- persistence ----------
@@ -92,8 +92,8 @@ function load(doc) {
   state.tiers = doc.tiers.map((t) => ({ id: t.id || newId(), name: t.name || "", color: t.color || "#888888", keys: (t.keys || []).filter((k) => doc.items && doc.items[k]) }));
   state.items = doc.items || {};
   state.order = (doc.order || Object.keys(state.items)).filter((k) => state.items[k]);
-  state.mode = ["venn", "axis", "awards", ...SCALE_MODES].includes(doc.mode) ? doc.mode : "tier";
-  state.scales = cleanScales(doc.scales);
+  state.mode = ["venn", "axis", "awards", ...PAGE_MODES].includes(doc.mode) ? doc.mode : "tier";
+  state.scales = cleanScales(doc.scales); state.match = cleanMatch(doc.match, state.items);
   const v = doc.venn;
   if (v && Array.isArray(v.circles) && v.circles.length >= 2) {
     state.venn = { n: v.n === 2 ? 2 : 3, size: +v.size || 100, overlap: v.overlap ?? 55, regions: {},
@@ -110,19 +110,19 @@ function load(doc) {
     byGame: Object.fromEntries(Object.entries(aw.byGame && typeof aw.byGame === "object" ? aw.byGame : {}).slice(0, 600).map(([g, v]) => [g.slice(0, 200), cleanAwardSet(v)])) };
   state.kind = doc.kind === "games" ? "games" : "characters";
   const o = doc.other; state.other = o && Array.isArray(o.tiers) && o.items && o.venn && o.axis ? o : null; // the list you're not looking at
-  if (state.other) { state.other.awards = fixAwards(state.other.awards); state.other.items = hydrateItems(state.other.items); state.other.scales = cleanScales(state.other.scales); }
-  if (state.kind === "games") { state.awards.scope = ""; if (isScalesMode()) state.mode = "tier"; }
+  if (state.other) { state.other.awards = fixAwards(state.other.awards); state.other.items = hydrateItems(state.other.items); state.other.scales = cleanScales(state.other.scales); state.other.match = cleanMatch(state.other.match, state.other.items); }
+  if (state.kind === "games") { state.awards.scope = ""; if (isPageMode()) state.mode = "tier"; }
   return true;
 }
 try { load(JSON.parse(localStorage.getItem(STORE))); } catch (e) { /* first run */ }
 
 // ---------- two lists: characters and games ----------
-const LIST_KEYS = ["name", "mode", "tiers", "items", "order", "venn", "axis", "awards", "scales"];
-const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), awards: makeAwards(), scales: makeScales() });
+const LIST_KEYS = ["name", "mode", "tiers", "items", "order", "venn", "axis", "awards", "scales", "match"];
+const freshList = (kind) => ({ name: kind === "games" ? "My game tier list" : "My character tier list", mode: "tier", tiers: makeTiers(TIER_PRESETS["S – F"]), items: {}, order: [], venn: makeVenn(), axis: makeAxis(), awards: makeAwards(), scales: makeScales(), match: makeMatch() });
 function switchKind(kind) {
   if (kind === state.kind) return;
   const snap = Object.fromEntries(LIST_KEYS.map((k) => [k, state[k]]));
-  const next = state.other || freshList(kind); next.awards = fixAwards(next.awards); if (kind === "games") next.awards.scope = ""; next.scales = cleanScales(next.scales); if (kind === "games" && SCALE_MODES.includes(next.mode)) next.mode = "tier";   // per-game awards and scales are for characters
+  const next = state.other || freshList(kind); next.awards = fixAwards(next.awards); if (kind === "games") next.awards.scope = ""; next.scales = cleanScales(next.scales); next.match = cleanMatch(next.match, next.items); if (kind === "games" && PAGE_MODES.includes(next.mode)) next.mode = "tier";   // per-game awards and scales are for characters
   scopeSigReset();
   LIST_KEYS.forEach((k) => (state[k] = next[k]));
   state.other = snap; state.kind = kind; selected = null; save(); renderVennBar.lastMode = null;
@@ -169,9 +169,9 @@ function applyUi() {
   r.setProperty("--axis-card", u.axisCard);
   const games = state.kind === "games";
   document.body.classList.toggle("kind-games", games);
-  $("#heroFilter").hidden = games; $("#btnAuto").hidden = isScalesMode() || (games && state.mode !== "tier" && state.mode !== "awards");
-  $("#modeSeg").querySelectorAll("button").forEach((b) => (b.hidden = games && SCALE_MODES.includes(b.dataset.mode)));
-  document.body.classList.toggle("is-scales", isScalesMode());
+  $("#heroFilter").hidden = games; $("#btnAuto").hidden = isPageMode() || (games && state.mode !== "tier" && state.mode !== "awards");
+  $("#modeSeg").querySelectorAll("button").forEach((b) => (b.hidden = games && PAGE_MODES.includes(b.dataset.mode)));
+  document.body.classList.toggle("is-scales", isPageMode()); $("#btnExport").hidden = state.mode === "match";
   $("#kindSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === state.kind)));
   document.body.classList.toggle("is-venn", state.mode === "venn");
   document.body.classList.toggle("is-axis", state.mode === "axis");
@@ -257,6 +257,7 @@ function render() {
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
   $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode] || "";
   $("#awardsBar").hidden = state.mode !== "awards"; if (state.mode === "awards") { $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar(); }
+  if (state.mode === "match") { matchRender(); if (document.activeElement !== $("#listName")) $("#listName").value = state.name; return; }
   if (isScalesMode()) { scRender(); if (document.activeElement !== $("#listName")) $("#listName").value = state.name; return; }
   if (state.mode === "awards") { $("#board").innerHTML = awardsBoardHtml(); if (state.awards.scope && !castInfo[state.awards.scope]) loadCast(state.awards.scope); }
   else if (state.mode === "axis") $("#board").innerHTML = axisBoardHtml();
@@ -898,13 +899,13 @@ $("#btnAuto").onclick = () => {
   autoRankTiers(rated); save(); render(); toast(`Placed ${rated.length} characters by your rating`);
 };
 $("#btnReset").onclick = () => {
-  if (isScalesMode()) { $("#btnReset").closest("details").open = false; return toast("Nothing to move here: ratings are kept per route. Use Scales → Clear all ratings to wipe them.", "error"); }
+  if (isPageMode()) { $("#btnReset").closest("details").open = false; return toast("Nothing to move here in this view. Switch to the Tier list.", "error"); }
   if (state.mode === "venn") state.venn.regions = {}; else if (state.mode === "axis") state.axis.pos = {}; else if (state.mode === "awards") curAwards().cats.forEach((c) => (c.slots = [null, null, null])); else state.tiers.forEach((t) => (t.keys = []));
   save(); render(); $("#btnReset").closest("details").open = false;
 };
 // Reset character pool: removes the unranked characters shown in the pool; anything already on the board stays.
 function resetPool() {
-  if (isScalesMode()) return toast("Reset pool is off in the Scales views. Switch to the Tier list to remove unranked characters.", "error");
+  if (isPageMode()) return toast("Reset pool is off in this view. Switch to the Tier list to remove unranked characters.", "error");
   if (state.mode === "awards") return toast("Reset pool is off in Awards: everyone stays in the pool so they can win several awards. Use More → Clear everything to start over.", "error");
   const here = state.mode === "awards" ? awardKeys() : placed(), keys = state.order.filter((k) => state.items[k] && !here.has(k));
   if (!keys.length) return toast("The pool is already empty");
@@ -1322,5 +1323,5 @@ addEventListener("scroll", closeCardMenu, true);
 
 let resizeT; addEventListener("resize", () => { if (state.mode !== "venn") return; clearTimeout(resizeT); resizeT = setTimeout(render, 200); });
 
-wireScales();
+wireScales(); wireMatch();
 render();
