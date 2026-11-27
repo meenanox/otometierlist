@@ -356,3 +356,11 @@ body.is-scales .pool-wrap,body.is-scales .resizer{display:none}
 .mt-buttons{align-self:center}
 .mt-hint{font-size:12px;margin-top:14px}
 @media (max-width:820px){.mt-row{grid-template-columns:1fr 1fr}.mt-buttons{grid-column:1 / -1;order:3}}
+
+/* rank match: click a card to pick it */
+.mt-row{grid-template-columns:minmax(0,1fr) minmax(170px,220px) minmax(0,1fr);align-items:center}
+button.mt-card{cursor:pointer;font:inherit;color:inherit;text-align:center}
+button.mt-card .cap{display:grid}
+button.mt-card:hover,button.mt-card:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent);transform:translateY(-2px)}
+.mt-q{font-weight:600;margin:6px 0 0}
+.mt-buttons .mt-ans{text-align:center}

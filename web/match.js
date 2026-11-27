@@ -3,9 +3,6 @@
 // only thing saved: the whole sort is replayed from them, which is what makes Undo and resuming easy.
 const PAGE_MODES = ["spectrum", "radar", "align", "match"];
 const isPageMode = () => PAGE_MODES.includes(state.mode);
-const MATCH_ANSWERS = [
-  [2, "Like a lot more"], [1, "Like more"], [0, "About the same"], [-1, "Like a little less"], [-2, "Like a lot less"],
-];
 const MATCH_SKIP = 9;   // "No opinion": counts as a tie in the order, but says nothing about how much you like either
 
 const makeMatch = () => ({ stage: "setup", games: [], keys: [], answers: [] });
@@ -34,7 +31,7 @@ function matchRun(keys, answers) {
 }
 const matchTotal = (n) => (n < 2 ? 0 : Math.max(1, Math.round(n * Math.log2(n) - n + 1)));   // roughly how many questions
 
-// A score out of 10 from how much more you liked each one: every answer pulls the two scores apart by its size.
+// A score out of 10 from all your choices: each pick pulls the two scores apart, a tie pulls them together.
 function matchScores(keys, pairs, order) {
   const x = Object.fromEntries(keys.map((k, i) => [k, (keys.length - i) * 0.01]));
   for (let it = 0; it < 300; it++) for (const [a, b, s] of pairs) {
@@ -77,27 +74,25 @@ function matchCountText() {
   el.textContent = n < 2 ? "Pick games with at least 2 characters." : `${n} characters${m.games.length ? ` from ${m.games.length} game${m.games.length === 1 ? "" : "s"}` : " (all games)"} · about ${matchTotal(n)} questions`;
   if (b) b.disabled = n < 2;
 }
-const mtCard = (k, side) => { const it = state.items[k]; return `<figure class="mt-card ${side}">${it.imgHi || it.img ? `<img src="${esc(imgSrc(it.imgHi || it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}<figcaption><b>${esc(it.label)}</b><small>${esc(it.game || "")}</small></figcaption></figure>`; };
+const mtCard = (k, side, ans) => { const it = state.items[k]; return `<button type="button" class="mt-card mt-pick ${side}" data-ans="${ans}" title="Pick ${esc(it.label)}">${it.imgHi || it.img ? `<img src="${esc(imgSrc(it.imgHi || it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}<span class="cap"><b>${esc(it.label)}</b><small>${esc(it.game || "")}</small></span></button>`; };
 function matchBattleHtml() {
   const m = state.match, { step } = matchRun(m.keys, m.answers);
   if (step.done) { m.stage = "done"; save(); return matchDoneHtml(); }
-  const [a, b] = step.value, pct = Math.min(99, Math.round(m.answers.length / matchTotal(m.keys.length) * 100)), A = state.items[a], Bi = state.items[b];
-  // each side has its own five choices; the same row on the other side is the opposite, so they always agree
-  const L = [[2, "Like a lot more"], [1, "Like more"], [-1, "Like a little less"], [-2, "Like a lot less"]];
-  const R = [[2, "Like a lot less"], [1, "Like a little less"], [-1, "Like more"], [-2, "Like a lot more"]];
-  const side = (rows, k, sd) => `<div class="mt-side ${sd}">${mtCard(k, sd)}<div class="mt-opts">${rows.map(([s, t]) => `<button class="mt-ans" data-ans="${s}">${sd === "l" ? `<kbd>${s > 0 ? (s === 2 ? 1 : 2) : (s === -1 ? 4 : 5)}</kbd>` : ""}${t}</button>`).join("")}</div></div>`;
+  const [a, b] = step.value, pct = Math.min(99, Math.round(m.answers.length / matchTotal(m.keys.length) * 100));
   return `<div class="mt-battle"><h2>Battle #${m.answers.length + 1}</h2><p class="muted">${pct}% sorted</p>
-    <div class="mt-row">${side(L, a, "l")}
-      <div class="mt-buttons"><p>How do you feel about <b>${esc(A.label)}</b> compared with <b>${esc(Bi.label)}</b>?</p>
-        <button class="mt-ans" data-ans="0"><kbd>3</kbd> About the same</button>
-        <div class="mt-aux"><button class="ghost" data-ans="${MATCH_SKIP}"><kbd>0</kbd> No opinion</button><button class="ghost" data-mt="undo"${m.answers.length ? "" : " disabled"}>Undo</button><button class="ghost" data-mt="setup">Save and leave</button></div></div>
-      ${side(R, b, "r")}</div>
-    <p class="muted mt-hint">Each button on one side matches the one level with it on the other: "Like a lot more" for one is "Like a lot less" for the other.</p></div>`;
+    <p class="mt-q">Which do you like more? Click one.</p>
+    <div class="mt-row">${mtCard(a, "l", 1)}
+      <div class="mt-buttons">
+        <button class="mt-ans" data-ans="0"><kbd>S</kbd> Like the same</button>
+        <button class="mt-ans" data-ans="${MATCH_SKIP}"><kbd>N</kbd> No opinion</button>
+        <div class="mt-aux"><button class="ghost" data-mt="undo"${m.answers.length ? "" : " disabled"}>Undo</button><button class="ghost" data-mt="setup">Save and leave</button></div></div>
+      ${mtCard(b, "r", -1)}</div>
+    <p class="muted mt-hint">Keys: ← or 1 picks the left one, → or 2 the right one, S is Like the same, N is No opinion, Backspace undoes.</p></div>`;
 }
 function matchDoneHtml() {
   const m = state.match, { step, pairs } = matchRun(m.keys, m.answers), order = step.done ? step.value : m.keys, sc = matchScores(m.keys, pairs, order);
   const rows = order.slice(0, mtShown).map((k, i) => { const it = state.items[k]; return `<li><b class="mt-rank">${i + 1}</b><span class="sc-th">${it.img ? `<img src="${esc(imgSrc(it.img))}" alt="">` : `<span class="ph">${esc((it.label || "?")[0])}</span>`}</span><span class="mt-name"><b>${esc(it.label)}</b><small>${esc(it.game || "")}</small></span><span class="mt-score">${sc[k].toFixed(1)}</span></li>`; }).join("");
-  return `<div class="mt-done"><h2>Your ranking</h2><p class="muted">${order.length} characters sorted in ${pairs.length} questions. The score out of 10 comes from how much more you liked each one.</p>
+  return `<div class="mt-done"><h2>Your ranking</h2><p class="muted">${order.length} characters sorted in ${pairs.length} questions. The score out of 10 comes from how your choices stack up against each other.</p>
     <div class="row"><button class="primary" data-mt="place">Place in my tier list</button><button class="ghost" data-mt="undo">Undo last answer</button><button class="ghost" data-mt="again">Rank again</button><button class="ghost" data-mt="setup">Back to setup</button></div>
     <ol class="mt-list">${rows}</ol>${order.length > mtShown ? `<button class="ghost" data-mt="more">Show more (${order.length - mtShown} left)</button>` : ""}</div>`;
 }
@@ -150,14 +145,15 @@ function wireMatch() {
     if (t.dataset.mg !== undefined) { m.games = t.checked ? [...new Set([...m.games, t.dataset.mg])] : m.games.filter((g) => g !== t.dataset.mg); save(); matchCountText(); }
     else if (t.id === "mtHero") { state.ui.heroines = t.value; save(); matchRender(); }
   });
-  const pair = (e, on) => { const b = e.target.closest?.(".mt-opts .mt-ans"); if (!b) return; document.querySelectorAll(`.mt-opts .mt-ans[data-ans="${b.dataset.ans}"]`).forEach((x) => x.classList.toggle("pair", on)); };
-  B.addEventListener("mouseover", (e) => pair(e, true)); B.addEventListener("mouseout", (e) => pair(e, false));
   let tm = 0;
   B.addEventListener("input", (e) => { if (state.mode === "match" && e.target.id === "mtSearch") { mtGameQuery = e.target.value; clearTimeout(tm); tm = setTimeout(() => { matchRender(); const s = $("#mtSearch"); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 200); } });
   document.addEventListener("keydown", (e) => {
     if (state.mode !== "match" || state.match.stage !== "battle" || e.target.closest?.("input,select,textarea") || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key >= "1" && e.key <= "5") { e.preventDefault(); matchAnswer(MATCH_ANSWERS[+e.key - 1][0]); }
-    else if (e.key === "0") { e.preventDefault(); matchAnswer(MATCH_SKIP); }
-    else if (e.key === "Backspace" || e.key.toLowerCase() === "z") { e.preventDefault(); matchUndo(); }
+    const k = e.key.toLowerCase();
+    if (k === "arrowleft" || k === "1") { e.preventDefault(); matchAnswer(1); }
+    else if (k === "arrowright" || k === "2") { e.preventDefault(); matchAnswer(-1); }
+    else if (k === "s" || k === "3") { e.preventDefault(); matchAnswer(0); }
+    else if (k === "n" || k === "0") { e.preventDefault(); matchAnswer(MATCH_SKIP); }
+    else if (k === "backspace" || k === "z") { e.preventDefault(); matchUndo(); }
   });
 }
