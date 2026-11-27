@@ -82,12 +82,17 @@ function matchBattleHtml() {
   const m = state.match, { step } = matchRun(m.keys, m.answers);
   if (step.done) { m.stage = "done"; save(); return matchDoneHtml(); }
   const [a, b] = step.value, pct = Math.min(99, Math.round(m.answers.length / matchTotal(m.keys.length) * 100)), A = state.items[a], Bi = state.items[b];
+  // each side has its own five choices; the same row on the other side is the opposite, so they always agree
+  const L = [[2, "Like a lot more"], [1, "Like more"], [-1, "Like a little less"], [-2, "Like a lot less"]];
+  const R = [[2, "Like a lot less"], [1, "Like a little less"], [-1, "Like more"], [-2, "Like a lot more"]];
+  const side = (rows, k, sd) => `<div class="mt-side ${sd}">${mtCard(k, sd)}<div class="mt-opts">${rows.map(([s, t]) => `<button class="mt-ans" data-ans="${s}">${sd === "l" ? `<kbd>${s > 0 ? (s === 2 ? 1 : 2) : (s === -1 ? 4 : 5)}</kbd>` : ""}${t}</button>`).join("")}</div></div>`;
   return `<div class="mt-battle"><h2>Battle #${m.answers.length + 1}</h2><p class="muted">${pct}% sorted</p>
-    <div class="mt-row">${mtCard(a, "l")}
+    <div class="mt-row">${side(L, a, "l")}
       <div class="mt-buttons"><p>How do you feel about <b>${esc(A.label)}</b> compared with <b>${esc(Bi.label)}</b>?</p>
-        ${MATCH_ANSWERS.map(([s, t], i) => `<button class="mt-ans a${s + 2}" data-ans="${s}"><kbd>${i + 1}</kbd> ${t}</button>`).join("")}
+        <button class="mt-ans" data-ans="0"><kbd>3</kbd> About the same</button>
         <div class="mt-aux"><button class="ghost" data-ans="${MATCH_SKIP}"><kbd>0</kbd> No opinion</button><button class="ghost" data-mt="undo"${m.answers.length ? "" : " disabled"}>Undo</button><button class="ghost" data-mt="setup">Save and leave</button></div></div>
-      ${mtCard(b, "r")}</div></div>`;
+      ${side(R, b, "r")}</div>
+    <p class="muted mt-hint">Each button on one side matches the one level with it on the other: "Like a lot more" for one is "Like a lot less" for the other.</p></div>`;
 }
 function matchDoneHtml() {
   const m = state.match, { step, pairs } = matchRun(m.keys, m.answers), order = step.done ? step.value : m.keys, sc = matchScores(m.keys, pairs, order);
@@ -145,6 +150,8 @@ function wireMatch() {
     if (t.dataset.mg !== undefined) { m.games = t.checked ? [...new Set([...m.games, t.dataset.mg])] : m.games.filter((g) => g !== t.dataset.mg); save(); matchCountText(); }
     else if (t.id === "mtHero") { state.ui.heroines = t.value; save(); matchRender(); }
   });
+  const pair = (e, on) => { const b = e.target.closest?.(".mt-opts .mt-ans"); if (!b) return; document.querySelectorAll(`.mt-opts .mt-ans[data-ans="${b.dataset.ans}"]`).forEach((x) => x.classList.toggle("pair", on)); };
+  B.addEventListener("mouseover", (e) => pair(e, true)); B.addEventListener("mouseout", (e) => pair(e, false));
   let tm = 0;
   B.addEventListener("input", (e) => { if (state.mode === "match" && e.target.id === "mtSearch") { mtGameQuery = e.target.value; clearTimeout(tm); tm = setTimeout(() => { matchRender(); const s = $("#mtSearch"); if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); } }, 200); } });
   document.addEventListener("keydown", (e) => {
