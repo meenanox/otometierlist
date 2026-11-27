@@ -15,16 +15,19 @@
   <div class="top-actions">
     <input id="listName" value="My character tier list" aria-label="List name">
     <span class="seg" id="kindSeg" title="Two separate lists"><button data-kind="characters" aria-pressed="true">Characters</button><button data-kind="games" aria-pressed="false">Games</button></span>
-    <span class="seg" id="modeSeg"><button data-mode="tier" aria-pressed="true">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button><button data-mode="spectrum" aria-pressed="false" title="Rate routes along a line, e.g. Fluff to Serious">Spectrum</button><button data-mode="radar" aria-pressed="false" title="Compare routes across all your scales">Radar</button><button data-mode="align" aria-pressed="false" title="A 3×3 alignment grid from two scales">Alignment</button><button data-mode="match" aria-pressed="false" title="Pick games, then choose between two characters at a time to sort them">Rank match</button></span>
+    <details class="more mode-menu" id="modeMenu"><summary id="modeLabel" title="What to make">Tier list</summary>
+      <div class="menu" id="modeSeg"><button data-mode="tier" aria-pressed="false">Tier list</button><button data-mode="venn" aria-pressed="false">Venn diagram</button><button data-mode="axis" aria-pressed="false">Axis chart</button><button data-mode="awards" aria-pressed="false">Awards</button><button data-mode="spectrum" aria-pressed="false" title="Rate routes along a line, e.g. Fluff to Serious">Spectrum</button><button data-mode="radar" aria-pressed="false" title="Compare routes across all your scales">Radar</button><button data-mode="align" aria-pressed="false" title="A 3×3 alignment grid from two scales">Alignment</button><button data-mode="match" aria-pressed="false" title="Pick games, then choose between two characters at a time to sort them">Rank match</button></div></details>
     <button id="btnImport" class="primary">Import</button>
-    <button id="btnAuto" class="ghost" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
-    <button id="btnTiers" class="ghost">Edit ranks</button>
-    <button id="btnLayout" class="ghost">Layout</button>
     <button id="btnExport" class="primary">Export image</button>
     <details class="more"><summary class="ghost">More</summary>
       <div class="menu">
+        <button id="btnAuto" title="Place characters by your KoiLog character ratings">Auto-rank by rating</button>
+        <button id="btnTiers">Edit ranks…</button>
+        <button id="btnLayout">Layout…</button>
+        <hr>
         <button id="btnSave">Save list to file</button>
         <button id="btnLoad">Open list file</button>
+        <hr>
         <button id="btnReset">Move everyone back to the pool</button>
         <button id="btnDetect">Detect heroines for imported characters</button>
         <button id="btnPoolReset">Reset character pool (remove unranked)</button>

@@ -337,3 +337,13 @@ body.is-scales .pool-wrap,body.is-scales .resizer{display:none}
 .mt-list li{display:grid;grid-template-columns:40px 34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:4px 6px;border-radius:8px}
 .mt-list li:nth-child(odd){background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
 .mt-rank{text-align:right;color:var(--accent)}.mt-name{display:grid;min-width:0}.mt-name small{color:var(--muted)}.mt-score{font-weight:700}
+
+/* header dropdowns */
+.more summary::-webkit-details-marker{display:none}
+.more summary::after{content:" ▾";font-size:11px;opacity:.7}
+.more[open] summary{background:var(--bg)}
+.mode-menu summary{font-weight:600;min-width:130px;background:var(--panel)}
+.mode-menu .menu{right:auto;left:0;min-width:200px}
+.more .menu button[aria-pressed=true]{color:var(--accent);font-weight:700;background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.more .menu hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+.more .menu button[hidden]{display:none}

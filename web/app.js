@@ -255,6 +255,7 @@ function render() {
   applyUi();
   if (renderVennBar.lastMode !== state.mode + state.venn.n) { renderVennBar(); renderAxisBar(); renderVennBar.lastMode = state.mode + state.venn.n; }
   $("#modeSeg").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+  $("#modeLabel").textContent = $(`#modeSeg [data-mode="${state.mode}"]`)?.textContent || "Tier list";
   $("#btnTiers").hidden = state.mode !== "tier"; $("#btnAuto").textContent = { venn: "Auto-fill from ratings", axis: "Auto-plot from ratings", awards: "Auto-nominate from ratings", tier: "Auto-rank by rating" }[state.mode] || "";
   $("#awardsBar").hidden = state.mode !== "awards"; if (state.mode === "awards") { $("#awCols").value = String(curAwards().cols); fillPackMenu(); fillScopeBar(); }
   if (state.mode === "match") { matchRender(); if (document.activeElement !== $("#listName")) $("#listName").value = state.name; return; }
@@ -850,8 +851,12 @@ function autoPlotAxis(rated) {
 // ---------- venn controls ----------
 $("#modeSeg").onclick = (e) => {
   const b = e.target.closest("[data-mode]"); if (!b || b.dataset.mode === state.mode) return;
-  state.mode = b.dataset.mode; selected = null; save(); render();
+  state.mode = b.dataset.mode; selected = null; $("#modeMenu").open = false; save(); render();
 };
+// header dropdowns close when you click anywhere else, or choose something
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(e.target) || (e.target.closest(".menu button") && !e.target.closest("[hidden]"))) d.open = false; });
+});
 $("#vennBar").addEventListener("input", (e) => {
   const t = e.target, v = state.venn;
   if (t.id === "vSize") v.size = +t.value;
